@@ -1,0 +1,45 @@
+\documentclass[10pt]{article}
+\input{_preamble}
+
+% TEMPLATE — replace every fact with your own. Keep the structure: it is
+% ATS-verified (single column, standard fonts, clean text layer via pdflatex+cmap).
+% Deployments should override this file with the RESUME_TEX_AIE env var (Secret
+% Manager) so your real resume never lives in the repo. Gate every change with
+% scripts/ats_check.py (exactly 1 page + keyword coverage).
+
+\begin{document}
+
+\name{JANE DOE}
+\contactline{City, ST \textbar{} (555) 555-5555 \textbar{} \href{mailto:you@example.com}{you@example.com} \textbar{} \href{https://www.linkedin.com/in/janedoe}{linkedin.com/in/janedoe} \textbar{} \href{https://janedoe.dev}{janedoe.dev}}
+
+\section{Summary}
+AI engineer framing: LLM platforms, prompt infrastructure, agents, and AI quality evaluation. Two to three lines, concrete, no buzzword filler.
+
+\section{Skills}
+\textbf{Languages:} Python, TypeScript, SQL \\
+\textbf{AI / LLM:} LLM integration, prompt engineering, RAG, evaluation, fine-tuning \\
+\textbf{Backend / Frontend:} FastAPI, Node.js, React, Next.js \\
+\textbf{Cloud / MLOps:} GCP, AWS, Docker, Kubernetes, Terraform, CI/CD, monitoring \\
+\textbf{Databases:} PostgreSQL, MySQL, Redis
+
+\section{Work Experience}
+\entry{Your Title}{Company, City}{Mon YYYY -- Present}{}
+\begin{itemize}
+  \item \textbf{Project name:} one concrete accomplishment per bullet, ending on a number or fact (cost saved, latency, revenue, users) --- never on commentary.
+  \item \textbf{Another project:} what you built, the stack in parentheses, the measurable outcome.
+\end{itemize}
+\entry{Earlier Title}{Earlier Company, City}{Mon YYYY -- Mon YYYY}{}
+\begin{itemize}
+  \item Scope, stack, and a quantified result.
+\end{itemize}
+
+\section{Projects}
+\entrysimple{Project name --- one-line description \,(\href{https://github.com/you/project}{GitHub})}{}
+\begin{itemize}
+  \item What it does, how it is built, the performance/scale numbers.
+\end{itemize}
+
+\section{Education}
+\entrysimple{Degree --- University (GPA)}{Mon YYYY -- Mon YYYY}
+
+\end{document}

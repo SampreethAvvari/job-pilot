@@ -1,0 +1,171 @@
+"""Per-job tailoring: JD keywords + tailored one-page resume + cover letter PDFs.
+
+Truth guardrails live in prompts/tailor_v1.txt: the model may only reorder,
+rephrase, and re-emphasize what the master resume already claims.
+"""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime
+from pathlib import Path
+from typing import Callable
+
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaInMemoryUpload
+from pydantic import BaseModel, Field
+
+from jobpilot import sheets
+from jobpilot.config import Config
+from jobpilot.latexpdf import CompileError, compile_pdf
+
+RESUME_DIR = Path(__file__).parent / "resumes"
+PROMPT = Path(__file__).parent / "prompts" / "tailor_v1.txt"
+VARIANT_FILES = {
+    "FDE": "resume_FDE.tex",
+    "MLE": "resume_MLE.tex",
+    "SDE": "resume_SDE.tex",
+    "AIE": "resume_AIE.tex",
+}
+
+
+class TailorResult(BaseModel):
+    keywords: list[str] = Field(min_length=3, max_length=25)
+    tailored_tex: str
+    cover_letter_tex: str
+    changes: str = ""
+
+
+def _resume_tex(variant: str) -> str:
+    """RESUME_TEX_<VARIANT> env (Secret Manager) wins; repo template is the fallback."""
+    import os
+
+    env = os.environ.get(f"RESUME_TEX_{variant}")
+    if env:
+        return env
+    return (RESUME_DIR / VARIANT_FILES.get(variant, VARIANT_FILES["FDE"])).read_text(
+        encoding="utf-8"
+    )
+
+
+def _build_prompt(company: str, title: str, description: str, variant: str) -> str:
+    tex = _resume_tex(variant)
+    template = PROMPT.read_text(encoding="utf-8")
+    return template.format(
+        company=company, title=title, description=description[:6000], resume_tex=tex
+    )
+
+
+def generate(company: str, title: str, description: str, variant: str,
+             llm: Callable[[str], str]) -> TailorResult:
+    prompt = _build_prompt(company, title, description, variant)
+    last_err: Exception | None = None
+    for _ in range(2):
+        try:
+            return TailorResult.model_validate_json(llm(prompt))
+        except Exception as exc:  # malformed output — retry once
+            last_err = exc
+    raise CompileError(f"tailor generation failed: {last_err}")
+
+
+def _drive(creds):
+    return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
+def _ensure_folder(drive, name: str, parent: str | None = None) -> str:
+    q = (f"name = '{name}' and mimeType = 'application/vnd.google-apps.folder' "
+         "and trashed = false")
+    if parent:
+        q += f" and '{parent}' in parents"
+    found = drive.files().list(q=q, fields="files(id)").execute().get("files", [])
+    if found:
+        return found[0]["id"]
+    body: dict = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
+    if parent:
+        body["parents"] = [parent]
+    return drive.files().create(body=body, fields="id").execute()["id"]
+
+
+def upload_pdf(creds, folder_id: str, filename: str, pdf: bytes) -> str:
+    f = _drive(creds).files().create(
+        body={"name": filename, "parents": [folder_id]},
+        media_body=MediaInMemoryUpload(pdf, mimetype="application/pdf"),
+        fields="id",
+    ).execute()
+    return f"https://drive.google.com/file/d/{f['id']}/view"
+
+
+def tailor_row(creds, spreadsheet_id: str, row: dict, cfg: Config,
+               llm: Callable[[str], str], now: datetime) -> str:
+    """Tailor one sheet row; writes links/keywords back. Returns a note string."""
+    company, title = row["Company"], row["Title"]
+    variant = row.get("Resume variant") or "FDE"
+    description = row.get("JD excerpt") or ""
+    try:
+        result = generate(company, title, description, variant, llm)
+        resume_pdf, pages = compile_pdf(result.tailored_tex, f"{company}_{variant}")
+        if pages > 1:  # one retry with explicit instruction to cut
+            retry_llm = lambda p: llm(  # noqa: E731
+                p + "\nIMPORTANT: your previous attempt overflowed one page. "
+                    "Cut the two least relevant bullets.")
+            result = generate(company, title, description, variant, retry_llm)
+            resume_pdf, pages = compile_pdf(result.tailored_tex, f"{company}_{variant}")
+        cover_pdf, _ = compile_pdf(result.cover_letter_tex, f"{company}_cover")
+
+        drive = _drive(creds)
+        root = _ensure_folder(drive, "JobPilot Resumes")
+        tailored = _ensure_folder(drive, "Tailored", root)
+        day = _ensure_folder(drive, now.strftime("%Y-%m-%d"), tailored)
+        slug = re.sub(r"[^A-Za-z0-9]+", "_", f"{company}_{title}")[:60]
+        resume_url = upload_pdf(creds, day, f"{slug}_resume.pdf", resume_pdf)
+        cover_url = upload_pdf(creds, day, f"{slug}_cover.pdf", cover_pdf)
+
+        sheets.update_cells(creds, spreadsheet_id, [
+            (row["_row"], "Tailored resume", resume_url),
+            (row["_row"], "Cover letter", cover_url),
+            (row["_row"], "JD keywords", ", ".join(result.keywords)),
+        ])
+        return f"tailored: {company} — {title} ({variant})"
+    except Exception as exc:  # noqa: BLE001 — one failure must not kill the batch
+        return f"tailor FAILED for {company} — {title}: {type(exc).__name__}: {exc}"
+
+
+def auto_tailor(creds, spreadsheet_id: str, cfg: Config, llm: Callable[[str], str],
+                now: datetime) -> list[str]:
+    """Tailor every shortlisted, not-yet-tailored job (cost-capped per run)."""
+    if not cfg.tailoring.enabled:
+        return []
+    rows = sheets.read_rows(creds, spreadsheet_id)
+    todo = [
+        r for r in rows
+        if not r.get("Tailored resume")
+        and r.get("Status") in ("New", "")
+        and str(r.get("Fit", "")).isdigit()
+        and int(r["Fit"]) >= cfg.tailoring.auto_threshold
+    ][: cfg.tailoring.max_per_run]
+    notes = [tailor_row(creds, spreadsheet_id, r, cfg, llm, now) for r in todo]
+    return notes or ["tailor: nothing new to tailor"]
+
+
+def make_tailor_llm(cfg: Config):
+    """Plain-text Gemini call (the tailor validates JSON itself)."""
+    import os
+
+    from google import genai
+
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    client = (
+        genai.Client(vertexai=True, project=project,
+                     location=os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1"))
+        if project else genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    )
+
+    def llm(prompt: str) -> str:
+        resp = client.models.generate_content(
+            model=cfg.scoring.model,
+            contents=prompt,
+            config={"response_mime_type": "application/json"},
+        )
+        return resp.text
+
+    return llm

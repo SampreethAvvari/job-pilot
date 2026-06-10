@@ -1,0 +1,18 @@
+FROM python:3.12-slim
+
+# pdflatex for per-job tailored resume/cover-letter PDFs (cmap = ATS-clean text layer)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    texlive-latex-base texlive-latex-recommended texlive-latex-extra \
+    texlive-fonts-recommended && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY pyproject.toml ./
+COPY src ./src
+RUN pip install --no-cache-dir .
+
+COPY profile.yaml ./
+
+# ENTRYPOINT (not CMD) so per-execution arg overrides (--tailor-job, --outreach-job)
+# append to the command instead of replacing it.
+ENTRYPOINT ["python", "-m", "jobpilot"]

@@ -1,0 +1,20 @@
+Write a short cold outreach email from the candidate to a recruiter/hiring manager about
+one specific job. It must be specific, warm, confident, and under 130 words. No flattery
+filler, no "I hope this finds you well". Reference the exact role and one or two concrete
+matching accomplishments (true facts from the profile below only), and state that the
+candidate has applied (or is applying). If the profile mentions education or
+work-authorization/visa status, state it matter-of-factly, never apologetically.
+End by asking for a brief chat and noting the tailored resume is attached/linked.
+
+CANDIDATE PROFILE
+{profile_summary}
+
+JOB
+Company: {company}
+Title: {title}
+Description excerpt: {description}
+
+RECIPIENT (may be empty — then write a generic greeting "Hi there,"):
+{contact_name} — {contact_title}
+
+Return JSON exactly: {{"subject": "...", "body": "..."}} (body is plain text, no markdown).

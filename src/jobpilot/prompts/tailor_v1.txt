@@ -1,0 +1,34 @@
+You tailor a resume and write a cover letter for one specific job posting.
+
+THE JOB
+Company: {company}
+Title: {title}
+Description: {description}
+
+THE CANDIDATE'S MASTER RESUME (LaTeX source — every fact in it is true)
+{resume_tex}
+
+YOUR TASKS
+1. keywords: Extract the 10-18 most important keywords/phrases an ATS or recruiter would
+   screen for in THIS job description (skills, tools, methods, domain terms).
+2. tailored_tex: Produce the COMPLETE tailored LaTeX resume source.
+   ABSOLUTE TRUTH RULES — you may ONLY: reorder bullets/sections, rephrase existing bullets,
+   re-emphasize relevant facts, adjust the Summary wording, and weave in keywords from task 1
+   WHERE THE MASTER ALREADY SUPPORTS THEM TRUTHFULLY. You may NEVER invent employers, titles,
+   dates, metrics, tools, or accomplishments not present in the master. Keep the same
+   \documentclass and \input{{_preamble}} lines and overall structure. Keep total content
+   length within 5% of the master so it still fits exactly one page. Escape LaTeX special
+   characters (%, $, &, #, _) exactly as the master does.
+   STYLE: keep the master's direct, concrete voice. BANNED: "Highly accomplished",
+   "proven track record", "results-driven", "passionate", and trailing filler clauses
+   like "showcasing X", "demonstrating Y", "ensuring Z" appended to bullets. Bullets end
+   on the concrete fact or number, not on commentary.
+3. cover_letter_tex: A COMPLETE one-page LaTeX cover letter (same \documentclass[10pt]{{article}}
+   and \input{{_preamble}}). Structure: candidate header (same contact line as resume),
+   date placeholder line "\today", greeting ("Dear {company} Hiring Team,"), 3 short
+   paragraphs (~220 words total): why this role, 2-3 concrete matching accomplishments drawn
+   from the resume (true facts only), close with enthusiasm and availability. Sign off
+   "Sincerely, \\\\ Sampreeth Avvari". No \maketitle, no letter class.
+4. changes: One sentence on what you emphasized.
+
+Return JSON exactly: {{"keywords": [...], "tailored_tex": "...", "cover_letter_tex": "...", "changes": "..."}}

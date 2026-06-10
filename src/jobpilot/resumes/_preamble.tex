@@ -1,0 +1,25 @@
+% Shared ATS-safe preamble: single column, standard serif, no tables/graphics.
+% Compile with pdflatex: cmap gives a clean ToUnicode text layer for ATS parsers.
+\usepackage{cmap}
+\usepackage[margin=0.5in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{charter}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\definecolor{rule}{gray}{0.55}
+
+\titleformat{\section}{\normalsize\bfseries}{}{0em}{\MakeUppercase}[{\color{rule}\titlerule}]
+\titlespacing{\section}{0pt}{7pt}{3pt}
+
+\setlist[itemize]{leftmargin=1.05em, itemsep=0.5pt, parsep=0pt, topsep=1pt, label=\textbullet}
+
+\newcommand{\name}[1]{{\centering{\LARGE\bfseries #1}\par}}
+\newcommand{\contactline}[1]{{\centering\small #1\par}}
+\newcommand{\entry}[4]{\textbf{#1} \textbar{} #2\hfill\textbf{#3}#4}
+\newcommand{\entrysimple}[2]{\textbf{#1}\hfill\textbf{#2}}

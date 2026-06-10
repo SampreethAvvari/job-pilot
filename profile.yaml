@@ -1,0 +1,97 @@
+# JobPilot configuration — single source of truth for every pipeline stage.
+# THIS FILE IS A TEMPLATE. Two ways to personalize:
+#   1. Edit it directly (fine for private forks), or
+#   2. Keep personal data out of the repo: store your real version in Secret Manager
+#      and mount it as the JOBPILOT_PROFILE_YAML env var (overrides this file).
+
+profile:
+  name: Jane Doe
+  headline: Software Engineer (full-stack, ML, cloud)
+  sponsorship_needed: false        # set true if you need visa sponsorship
+  locations: [New York NY, Remote US]
+  summary: >
+    2-4 sentences the scorer and tailor use to judge fit and write outreach.
+    Mention your current role, strongest projects with concrete numbers, your
+    stack, education, and (if applicable) work-authorization status.
+
+queries:                # job titles to search for, used by every source
+  - Software Engineer
+  - Machine Learning Engineer
+  - AI Engineer
+  - Data Engineer
+
+# Hard title filters: anything matching these words never reaches scoring.
+exclude_title_words:
+  - manager
+  - director
+  - principal
+  - staff
+  - distinguished
+  - vp
+  - head
+  - intern
+  - internship
+  - phd
+  - senior
+  - sr
+  - lead
+  - contract
+  - contractor
+  - freelance
+  - part-time
+  - temporary
+
+# JD-text patterns (regex, case-insensitive) that drop a job before scoring.
+# Defaults live in src/jobpilot/config.py (citizenship/clearance/no-sponsorship);
+# uncomment to customize:
+# exclude_jd_patterns: [...]
+
+sources:
+  greenhouse:
+    enabled: true
+    companies:  # board slugs at boards-api.greenhouse.io — validate with scripts/record_fixtures.py
+      - stripe
+      - databricks
+      - figma
+      - anthropic
+      - cloudflare
+      - datadog
+  lever:
+    enabled: true
+    companies: [palantir, plaid]
+  ashby:
+    enabled: true
+    companies: [notion, linear, ramp, cursor, openai, perplexity]
+  remoteok:
+    enabled: true
+    max_items: 100
+  hn_hiring:
+    enabled: true
+    max_items: 300
+  adzuna:
+    enabled: true   # requires ADZUNA_APP_ID / ADZUNA_APP_KEY env; skipped if absent
+    max_items: 100
+  apify_linkedin:
+    enabled: true   # requires APIFY_TOKEN env; skipped if absent
+    actor_id: curious_coder~linkedin-jobs-scraper  # pay-per-result, free-credit friendly
+    max_items: 50   # protects free credits
+
+scoring:
+  threshold: 60
+  model: gemini-2.5-flash  # valid on both Vertex AI and AI Studio
+
+tailoring:
+  enabled: true
+  auto_threshold: 60   # auto-tailor jobs scoring at/above this
+  max_per_run: 15      # compute cap per run
+
+caps:
+  shortlist: 25
+  per_source: 100
+  freshness_days: 7    # drop postings older than this (unknown dates kept)
+
+sheet:
+  spreadsheet_id: ""   # leave empty — the first run creates your dashboard and logs the id
+
+digest:
+  to: you@example.com
