@@ -148,8 +148,31 @@ def tailor_row(creds, spreadsheet_id: str, row: dict, cfg: Config,
         sheets.append_report(creds, spreadsheet_id, "job", row["Job ID"],
                              report["score"], report_json(report),
                              now.strftime("%Y-%m-%d %H:%M"))
-        return (f"tailored: {company} — {title} ({variant}) "
+
+        note = (f"tailored: {company} — {title} ({variant}) "
                 f"ATS {report['score']} in {attempts} attempt(s)")
+        try:  # transparency report — best-effort, tailoring already succeeded
+            from jobpilot import explain
+
+            baseline = _resume_tex(variant)
+            diff_url = ""
+            diff_pdf = explain.latexdiff_pdf(baseline, tex, f"{company}_diff")
+            if diff_pdf:
+                diff_url = upload_pdf(creds, day, f"{slug}_diff.pdf", diff_pdf)
+            tr = explain.generate_report(
+                explain.build_explain_prompt(
+                    company, title, description, row.get("URL", ""), baseline,
+                    tex, result.cover_letter_tex, result.keywords,
+                    report["issues"]),
+                llm)
+            sheets.append_report(
+                creds, spreadsheet_id, "tailor", row["Job ID"], report["score"],
+                explain.assemble_report(tr, explain.diff_sections(baseline, tex),
+                                        diff_url, report),
+                now.strftime("%Y-%m-%d %H:%M"))
+        except Exception as exc:  # noqa: BLE001 — visible but never fatal (BL-18)
+            note += f" | transparency report FAILED: {type(exc).__name__}: {exc}"
+        return note
     except Exception as exc:  # noqa: BLE001 — one failure must not kill the batch
         return f"tailor FAILED for {company} — {title}: {type(exc).__name__}: {exc}"
 
