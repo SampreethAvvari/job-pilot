@@ -1,7 +1,14 @@
 import base64
 import json
 
-from jobpilot.inboxwatch import Finding, body_text, classify, forward_only, status_for
+from jobpilot.inboxwatch import (
+    Finding,
+    body_text,
+    build_alert,
+    classify,
+    forward_only,
+    status_for,
+)
 
 MESSAGES = [
     {"id": "m1", "from": "recruiter@acme.com", "subject": "Interview availability",
@@ -52,6 +59,26 @@ def test_forward_only_transitions():
     assert forward_only("Interview", "Response") is None  # never downgrade
     assert forward_only("Applied", "Rejected") == "Rejected"  # terminal always allowed
     assert forward_only("Applied", None) is None
+
+
+MSG = {"id": "18c2a", "from": "Recruiter <r@acme.com>", "subject": "Next steps & <interview>",
+       "snippet": "s", "body": "Are you free Tuesday?"}
+NEXT_STEP = Finding(message_index=0, classification="next_step", is_interview=True,
+                    company="Acme", reason="asks availability")
+
+
+def test_build_alert_subject_and_link():
+    subject, body = build_alert("me@gmail.com", MSG, NEXT_STEP)
+    assert subject == "🎯 Acme responded — check me@gmail.com"
+    assert "https://mail.google.com/mail/?authuser=me@gmail.com#all/18c2a" in body
+    assert "Are you free Tuesday?" in body
+
+
+def test_build_alert_escapes_html_and_handles_unknown_company():
+    anon = Finding(message_index=0, classification="next_step", reason="r")
+    subject, body = build_alert("me@gmail.com", MSG, anon)
+    assert subject.startswith("🎯 A company responded")
+    assert "<interview>" not in body and "&lt;interview&gt;" in body
 
 
 def b64(s: str) -> str:

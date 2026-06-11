@@ -122,6 +122,33 @@ def status_for(f: Finding) -> str | None:
     return None
 
 
+def build_alert(account: str, msg: dict, finding: Finding) -> tuple[str, str]:
+    """(subject, html) for one next_step finding."""
+    company = finding.company or "A company"
+    link = f"https://mail.google.com/mail/?authuser={account}#all/{msg['id']}"
+    subject = f"🎯 {company} responded — check {account}"
+    body = (
+        f"<h2>{html.escape(company)} moved your application forward</h2>"
+        f"<p><b>Inbox:</b> {html.escape(account)}<br>"
+        f"<b>From:</b> {html.escape(msg['from'])}<br>"
+        f"<b>Subject:</b> {html.escape(msg['subject'])}</p>"
+        f"<p><b>Why this matters:</b> {html.escape(finding.reason)}</p>"
+        f"<blockquote>{html.escape(msg['body'][:600])}</blockquote>"
+        f'<p><a href="{link}">Open this email</a></p>'
+    )
+    return subject, body
+
+
+def send_alert(primary_creds, to: str, subject: str, body: str) -> None:
+    msg = MIMEText(body, "html")
+    msg["To"] = to
+    msg["Subject"] = subject
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    build("gmail", "v1", credentials=primary_creds, cache_discovery=False).users().messages().send(
+        userId="me", body={"raw": raw}
+    ).execute()
+
+
 def classify(messages: list[dict], tracked: list[dict],
              llm: Callable[[str], str]) -> list[Finding]:
     """One LLM call per inbox batch. Pure given llm; failures degrade to []."""
