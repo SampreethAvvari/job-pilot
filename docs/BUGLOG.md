@@ -92,3 +92,9 @@ Format: **Symptom → Root cause → Fix → Guard now in place.**
 - **Root cause:** keyword-coverage-only scoring measures none of what real graders weight: quantified bullets, 2-line brevity, weak verbs, buzzwords, soft-skill evidence.
 - **Fix:** researched the actual rubric (published checks + documented score reports) and rebuilt `src/jobpilot/judge.py` as a weighted replica (impact 35 / brevity 20 / style 15 / sections 15 / soft skills 15). Calibration: new judge scored the old resumes 76-86 vs the real 73.
 - **Guard:** never trust a self-built scorer without an external ground-truth comparison; keep feeding real grader reports back in as rules.
+
+### BL-18 · The reply scanner never matched anything in production
+- **Symptom:** recruiter replies sat in the inbox; rows never advanced; digest always said "no application replies".
+- **Root cause:** `make_gemini_llm` baked `response_schema=_ScoreBatch` into every call, so the scanner's prompt (expecting `{"matches": ...}`) always got `{"scores": ...}` back; `_MatchBatch.model_validate_json` failed and `classify()` silently returned `[]` — the catch-all that "must never break the run" also never told anyone.
+- **Fix:** `make_gemini_llm(cfg, schema=...)` — schema is per call site; the scanner's replacement (`inboxwatch.py`) passes its own `FindingBatch`.
+- **Guard:** a shared LLM wrapper with a baked-in response schema silently breaks every other caller — when a "degrade, never raise" path returns empty, make sure the empty case is distinguishable from "nothing to do" (the InboxWatch tab now logs every judged message).

@@ -113,6 +113,20 @@ python scripts/google_oauth_setup.py    # browser opens — sign in as that acco
 # prints GOOGLE_OAUTH_REFRESH_TOKEN and writes token.json (local dev)
 ```
 
+**Watching extra inboxes (optional):** the inbox watch can monitor additional Gmail
+accounts for recruiter replies and email you the moment a company moves you forward.
+Add each extra account as a test user on the consent screen (console step 2 above),
+then per account:
+
+```bash
+python scripts/google_oauth_setup.py --inbox   # sign in as THAT account
+```
+
+This requests **gmail.readonly only** — extra accounts can never send mail or touch
+your Sheet. Tokens merge into `inbox_tokens.json` (gitignored); the script prints the
+JSON for the `JOBPILOT_INBOX_TOKENS` secret (Step 4). Publish the consent screen to
+**In production** (Audience page) or Google expires all refresh tokens after 7 days.
+
 ## Step 4 — Secrets
 
 ```bash
@@ -122,6 +136,12 @@ printf '%s' '<apify-token>'   | gcloud secrets create APIFY_TOKEN    --data-file
 printf '%s' '<adzuna-app-id>' | gcloud secrets create ADZUNA_APP_ID  --data-file=- --project $PROJECT
 printf '%s' '<adzuna-key>'    | gcloud secrets create ADZUNA_APP_KEY --data-file=- --project $PROJECT
 printf '%s' '<apollo-key>'    | gcloud secrets create APOLLO_API_KEY --data-file=- --project $PROJECT  # optional
+
+# optional — only when watching extra inboxes (Step 3 --inbox):
+gcloud secrets create JOBPILOT_INBOX_TOKENS --data-file=inbox_tokens.json --project $PROJECT
+# and after the job exists (Step 5), attach it:
+gcloud run jobs update jobpilot --region $REGION --project $PROJECT \
+  --update-secrets "JOBPILOT_INBOX_TOKENS=JOBPILOT_INBOX_TOKENS:latest"
 ```
 
 ## Step 5 — Deploy the pipeline job + console
@@ -160,13 +180,13 @@ gcloud beta iap web add-iam-policy-binding --project $PROJECT --resource-type=cl
 gcloud run jobs add-iam-policy-binding jobpilot --region $REGION --project $PROJECT \
   --member="serviceAccount:jobpilot-runner@$PROJECT.iam.gserviceaccount.com" --role=roles/run.invoker
 
-# full runs 4x/day (LinkedIn + tailoring + scanner + digest)
+# full runs 4x/day (LinkedIn + tailoring + inbox watch + digest)
 gcloud scheduler jobs create http jobpilot-daily --location $REGION --project $PROJECT \
   --schedule "0 0,6,12,18 * * *" --time-zone "America/New_York" \
   --uri "https://$REGION-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$PROJECT/jobs/jobpilot:run" \
   --http-method POST --oauth-service-account-email jobpilot-runner@$PROJECT.iam.gserviceaccount.com
 
-# hourly fast fetch (free sources only — protects Apify credits)
+# hourly fast fetch + inbox watch (free sources only — protects Apify credits)
 gcloud scheduler jobs create http jobpilot-hourly --location $REGION --project $PROJECT \
   --schedule "0 1-5,7-11,13-17,19-23 * * *" --time-zone "America/New_York" \
   --uri "https://run.googleapis.com/v2/projects/$PROJECT/locations/$REGION/jobs/jobpilot:run" \
@@ -244,13 +264,13 @@ nothing broader:
 |---|---|---|
 | `spreadsheets` | create/read/write the JobPilot dashboard Sheet | touch other spreadsheets it didn't open by id |
 | `gmail.compose` | create the **drafts** for recruiter outreach and send your digest email to yourself | read your mail |
-| `gmail.readonly` | the reply-scanner: reads the last ~3 days of inbox metadata/snippets to match recruiter replies to your applications | send/delete anything |
+| `gmail.readonly` | the inbox watch: reads recent inbox mail to spot recruiter replies and real next-step responses (extra watched accounts get ONLY this scope) | send/delete anything |
 | `drive.file` | upload tailored resume/cover PDFs and read files **this app created or you explicitly opened with it** | see the rest of your Drive |
 
 Guarantees baked into the code: outreach emails are **created as Gmail drafts, never
-sent** (`outreach.py` has no send call); the digest is sent only **to your own
-address**; the scanner only moves application status forward and never overrides
-your manual edits. Revoke everything anytime at myaccount.google.com → Security →
+sent** (`outreach.py` has no send call); the digest and inbox-watch alerts are sent
+only **to your own address**; the inbox watch only moves application status forward
+and never overrides your manual edits. Revoke everything anytime at myaccount.google.com → Security →
 Third-party access, or destroy the `GOOGLE_OAUTH_REFRESH_TOKEN` secret.
 
 ## Appendix B — Feature catalog (what each part does + where it's configured)
@@ -279,9 +299,17 @@ Third-party access, or destroy the `GOOGLE_OAUTH_REFRESH_TOKEN` secret.
   on-demand ✉Draft), Apollo looks up 1–2 recruiters (skips gracefully without a
   key), Gemini writes a ≤130-word note from your real accomplishments, and it lands
   in **your Gmail drafts** with a LinkedIn people-search fallback link on the row.
-- **Reply scanner** (`scanner.py`): each full run reads recent inbox messages,
-  matches them to tracked applications, classifies rejected/interview/next-steps,
-  and advances Status (forward-only; your manual edits always win).
+- **Inbox watch** (`inboxwatch.py`): every run (hourly + full) reads recent mail
+  from the primary inbox plus any extra accounts in `JOBPILOT_INBOX_TOKENS`, and
+  judges EVERY email — not just tracked applications. A genuine next step
+  (interview/phone-screen invite, scheduling or availability request, online
+  assessment, document request) triggers an **immediate alert email** with a deep
+  link to the exact message in the right account. Automated "thanks for applying"
+  acks and rejections never alert but are logged in the Sheet's `InboxWatch` tab
+  (the audit trail of every decision). Emails matched to tracked rows advance
+  Status (`Response`/`Interview`/`Rejected`, forward-only; manual edits win).
+  Configured in `profile.yaml → inbox_watch`; standalone run:
+  `python -m jobpilot --inbox-watch`.
 - **Digest email** (`digest.py`): after each full run — shortlist table sorted by
   fit, posted-age, links, and the Run notes. Recipient = `digest.to`.
 - **Console** (`ui/`): jobs table (role/posted/fit/source filters, three sort

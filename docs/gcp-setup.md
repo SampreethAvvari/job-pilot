@@ -12,9 +12,12 @@ walkthrough with commands, see [FORK-SETUP.md](FORK-SETUP.md).
   (roles: `run.viewer`, `run.invoker` on the job, `secretmanager.secretAccessor`),
   protected by IAP with a per-user allowlist.
 - **Cloud Scheduler** — `jobpilot-daily` (`0 0,6,12,18 * * *`, full runs) and
-  `jobpilot-hourly` (other hours, `--fast` + free sources only).
+  `jobpilot-hourly` (other hours, `--fast` + free sources only). Both run the
+  inbox watch (reply detection + alerts) — no extra scheduler needed.
 - **Secret Manager** (all injected as env vars):
   `GOOGLE_OAUTH_CLIENT_JSON`, `GOOGLE_OAUTH_REFRESH_TOKEN` — user OAuth identity;
+  `JOBPILOT_INBOX_TOKENS` — JSON `{email: refresh_token}` for EXTRA watched
+  inboxes (gmail.readonly only; the primary identity is watched automatically);
   `APIFY_TOKEN`, `ADZUNA_APP_ID/KEY`, `APOLLO_API_KEY` — source/contact APIs;
   `JOBPILOT_PROFILE` (→ env `JOBPILOT_PROFILE_YAML`), `RESUME_TEX_FDE/MLE/SDE/AIE`
   — your personal profile and resumes, kept out of the repo.

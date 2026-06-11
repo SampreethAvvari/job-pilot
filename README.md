@@ -13,11 +13,15 @@ It never sends anything on its own. You stay the pilot; it does the paperwork.
 
 ## What a day looks like
 
-- **Hourly**, fresh jobs from the free sources appear in your console.
+- **Hourly**, fresh jobs from the free sources appear in your console — and every
+  watched inbox (yours + any extra Gmail accounts) is checked for recruiter replies.
+  A genuine next step (interview invite, scheduling request, online assessment)
+  triggers an **instant alert email** telling you which company responded in which
+  inbox, with a link to the exact message. Rejections quietly update your tracker;
+  "thanks for applying" autoresponders are ignored.
 - **Four times a day**, a full run adds LinkedIn, tailors resumes + cover letters for
-  every job scoring ≥ 60, drafts recruiter outreach for anything you applied to, scans
-  your inbox for replies (rejections/interviews auto-update your tracker), and emails
-  you a digest.
+  every job scoring ≥ 60, drafts recruiter outreach for anything you applied to, and
+  emails you a digest.
 - **You** open the console, sort by *recently posted*, run down your best role category,
   click **Apply ↗** with the right tailored PDF one click away, and confirm when you're
   back. Irrelevant job? **✕** and it's gone forever.
@@ -38,7 +42,8 @@ It never sends anything on its own. You stay the pilot; it does the paperwork.
    │ tailor: per-job resume + cover letter → pdflatex → one-page PDF →      │
    │         Drive (truth guardrails: may rephrase, can never invent)       │
    │ reach:  Apollo contact lookup → personalized Gmail DRAFT (never sent)  │
-   │ scan:   inbox replies matched to applications, status auto-advances    │
+   │ watch:  every inbox judged for REAL next-steps → instant alert email · │
+   │         status auto-advances (rejections too) · InboxWatch audit tab   │
    │ record: Google Sheet = database AND human-readable dashboard           │
    └────────────────────────────────────────────────────────────────────────┘
                           ▲  trigger · read · write
