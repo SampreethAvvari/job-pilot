@@ -128,7 +128,9 @@ def test_outreach_row_drafts_with_signature_and_attachment(monkeypatch):
     monkeypatch.setattr(o, "_drive_pdf_bytes", lambda creds, url: b"%PDF-resume")
     monkeypatch.setattr(sh, "update_cells", lambda c, s, u: None)
 
-    llm = lambda p: json.dumps({"subject": "s", "body": "Short technical note."})
+    def llm(p):
+        return json.dumps({"subject": "s", "body": "Short technical note."})
+
     note = o.outreach_row("creds", "sid", dict(ROW), make_cfg(), llm, httpx.Client())
     assert note.startswith("outreach drafted")
     assert captured["to"] == "jane@acme.com"
