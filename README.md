@@ -33,8 +33,9 @@ It never sends anything on its own. You stay the pilot; it does the paperwork.
                           │
                           ▼
    ┌─ Cloud Run Job (Python 3.12) ─────────────────────────────────────────┐
-   │ fetch: Greenhouse · Lever · Ashby · RemoteOK · HN hiring · Adzuna ·    │
-   │        LinkedIn (Apify)                                                │
+   │ fetch: Greenhouse · Lever · Ashby · Workday · SmartRecruiters ·        │
+   │        Workable · Recruitee · RemoteOK · HN hiring · Adzuna ·          │
+   │        LinkedIn (Apify) — company boards via the Companies sheet tab   │
    │ filter: freshness · seniority words · citizenship/clearance/           │
    │         no-sponsorship regex wall (dropped before any compute)         │
    │ score:  Vertex AI Gemini, JSON-schema contract — fit 0-100, why,       │
@@ -76,6 +77,17 @@ It never sends anything on its own. You stay the pilot; it does the paperwork.
    lands in the digest's run notes.
 4. **Personal data lives in Secret Manager, not git.** This repo contains no secrets,
    no real resumes, no identity — verified across the entire history.
+
+## Company watchlist
+
+Add rows to the **Companies** tab of the dashboard Sheet (created automatically):
+just a company name, plus its careers URL if you have it (required for Workday).
+Within one scheduled run the pipeline detects the company's ATS
+(Greenhouse / Lever / Ashby / Workday / SmartRecruiters / Workable / Recruitee),
+fills in the board slug, and starts polling its public job-board API. The
+`Status`, `Last checked`, and `Jobs (last fetch)` columns show each board's
+health; companies on unsupported ATSes are marked `unsupported` and remain
+covered by the aggregator sources.
 
 ## Setting it up — where everything is explained
 
