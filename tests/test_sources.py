@@ -161,6 +161,27 @@ def test_apify(httpx_mock, monkeypatch):
     assert out[0].description == "desc"
 
 
+def test_fetch_many_isolates_errors_caps_and_records_stats(httpx_mock):
+    from jobpilot.models import Posting
+    from jobpilot.sources import common
+
+    httpx_mock.add_response(url="https://x.test/good", json={})
+    httpx_mock.add_response(url="https://x.test/bad", status_code=404)
+    client = httpx.Client()
+
+    def one(slug):
+        client.get(f"https://x.test/{slug}").raise_for_status()
+        return [
+            Posting(title=f"Engineer {i}", company=slug, url="u", source="t")
+            for i in range(3)
+        ]
+
+    common.RUN_STATS.clear()
+    out = common.fetch_many("t", ["good", "bad"], one, per_company=2)
+    assert len(out) == 2  # capped per company
+    assert common.RUN_STATS["t"] == {"good": "2", "bad": "404"}
+
+
 def test_registry_covers_all_profile_sources():
     real_cfg = Config.load(Path(__file__).parent.parent / "profile.yaml")
     assert set(real_cfg.sources) <= set(registry())
