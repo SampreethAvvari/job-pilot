@@ -109,7 +109,7 @@ NUMBERY = re.compile(
     r"(\d|%|\$|\bzero\b|half a day|\b(?:million|billion|thousand)\b)", re.IGNORECASE)
 AI_TELL_DASH = re.compile(r"[—–]")
 DATE_RANGE = re.compile(r"\{([A-Z][a-z]{2,8} \d{4})\s*--\s*([A-Z][a-z]{2,8} \d{4}|Present)\}")
-MAX_BULLET_WORDS = 26  # ~2 rendered lines; recruiters skim each bullet in ~2s
+MAX_BULLET_WORDS = 24  # ~2 rendered lines; recruiters skim each bullet in ~2s
 
 
 def detex(s: str) -> str:
@@ -231,9 +231,9 @@ def judge(tex_source: str, pdf_bytes: bytes, keywords: list[str]) -> dict:
             role_pen += 2
             issues.append(f"BREVITY: {nb} bullets under one role (max 8): {role['title']}")
     brevity -= min(4.0, role_pen)
-    if not 380 <= words_total <= 700:
+    if not 420 <= words_total <= 700:
         brevity -= 3
-        issues.append(f"BREVITY: {words_total} words (target 380-700 for one page)")
+        issues.append(f"BREVITY: {words_total} words (target 420-700 for one page)")
     fill_hits = 0
     for b in bullets + [p["summary"]]:
         low = (b or "").lower()
@@ -319,10 +319,15 @@ def judge(tex_source: str, pdf_bytes: bytes, keywords: list[str]) -> dict:
     # ---------- Soft skills (15) — evidence in bullets, not lists
     soft = 15.0
     blob = " ".join(bullets)
-    if not LEADERSHIP.search(blob):
+    lead_hits = len(set(m.group(0).lower() for m in LEADERSHIP.finditer(blob)))
+    if lead_hits == 0:
         soft -= 6
         issues.append("SOFT SKILLS: no leadership/management evidence "
                       "(led/managed/mentored/direct reports/cross-functional ownership)")
+    elif lead_hits == 1:
+        soft -= 3
+        issues.append("SOFT SKILLS: only one leadership signal; add a second "
+                      "(led/managed/mentored/coordinated ownership)")
     if not COMMUNICATION.search(blob):
         soft -= 3
         issues.append("SOFT SKILLS: no communication/stakeholder evidence")

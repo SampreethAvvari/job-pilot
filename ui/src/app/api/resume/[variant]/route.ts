@@ -23,10 +23,12 @@ export async function GET(
     { fileId: pdfId, alt: "media" },
     { responseType: "arraybuffer" },
   );
+  const inline = new URL(_req.url).searchParams.get("inline");
+  const disposition = inline ? "inline" : "attachment";
   return new Response(file.data as ArrayBuffer, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="resume_${variant}.pdf"`,
+      "Content-Disposition": `${disposition}; filename="resume_${variant}.pdf"`,
       "Cache-Control": "no-store",
     },
   });

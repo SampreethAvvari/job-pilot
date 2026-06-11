@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
 import type { AtsReport } from "@/lib/reports";
@@ -18,7 +19,7 @@ function scoreColor(score: number) {
 }
 
 export function ResumeCard({ data, report }: { data: ResumeCardData; report: AtsReport | null }) {
-  const [showReport, setShowReport] = useState(false);
+  const [open, setOpen] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const router = useRouter();
   const r = report?.report;
@@ -61,51 +62,27 @@ export function ResumeCard({ data, report }: { data: ResumeCardData; report: Ats
           </div>
         </div>
         {report && (
-          <button onClick={() => setShowReport(!showReport)}
-                  className="text-right"
-                  title="Open the full ATS report">
+          <button onClick={() => setOpen(true)} className="text-right"
+                  title="Open PDF + full ATS report">
             <div className="display text-2xl font-extrabold"
                  style={{ color: scoreColor(report.score) }}>
               {report.score}
             </div>
-            <div className="eyebrow">ats score ▾</div>
+            <div className="eyebrow">ats report ↗</div>
           </button>
         )}
       </div>
 
-      {showReport && r && (
-        <div className="mt-4 rounded border p-3 text-[11px]"
-             style={{ borderColor: "var(--line)", color: "var(--text-dim)" }}>
-          <div className="mb-2 flex flex-wrap gap-3">
-            {Object.entries(r.breakdown).map(([k, v]) => (
-              <span key={k}>
-                <span className="eyebrow">{k.replace("_", " ")}</span>{" "}
-                <b style={{ color: "var(--text)" }}>{v}</b>
-              </span>
-            ))}
-            <span><span className="eyebrow">keywords</span>{" "}
-              <b style={{ color: "var(--text)" }}>{Math.round(r.keyword_coverage * 100)}%</b>
-            </span>
-            <span><span className="eyebrow">pages</span> <b style={{ color: "var(--text)" }}>{r.pages}</b></span>
-            <span><span className="eyebrow">attempts</span> <b style={{ color: "var(--text)" }}>{r.attempts}</b></span>
-          </div>
-          {r.issues.length ? (
-            <ul className="list-disc pl-4">
-              {r.issues.map((i, idx) => <li key={idx}>{i}</li>)}
-            </ul>
-          ) : (
-            <div style={{ color: "var(--green)" }}>No violations — clean pass.</div>
-          )}
-          <div className="eyebrow mt-2">scored {report?.timestamp}</div>
-        </div>
-      )}
-
       <div className="mt-4 flex flex-wrap gap-2">
         {data.pdfId && (
-          <a className="btn-amber px-3 py-1.5 text-[11px]"
-             href={`/api/resume/${data.variant}`}>
+          <a className="btn-amber px-3 py-1.5 text-[11px]" href={`/api/resume/${data.variant}`}>
             ⬇ Download PDF
           </a>
+        )}
+        {report && (
+          <button onClick={() => setOpen(true)} className="btn-ghost px-3 py-1.5 text-[11px]">
+            ATS report
+          </button>
         )}
         {data.docId && (
           <a className="btn-ghost px-3 py-1.5 text-[11px]"
@@ -116,10 +93,78 @@ export function ResumeCard({ data, report }: { data: ResumeCardData; report: Ats
         )}
         <button onClick={regenerate} disabled={rebuilding}
                 className="btn-ghost px-3 py-1.5 text-[11px]"
-                title="Rewrite through the judge loop (up to 10 attempts); only published if the score improves">
-          {rebuilding ? <span className="blink">↻ regenerating… (takes a few min)</span> : "↻ Regenerate"}
+                title="Up to 10 judge-guided rewrites; published only if the score improves">
+          {rebuilding ? <span className="blink">↻ regenerating…</span> : "↻ Regenerate"}
         </button>
       </div>
+
+      {open && typeof document !== "undefined" && createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex",
+                      alignItems: "center", justifyContent: "center",
+                      background: "rgba(5,7,9,0.85)" }}
+             onClick={() => setOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()}
+               style={{ width: "94vw", maxWidth: 1300, height: "88vh",
+                        background: "#0e1318", borderRadius: 12, overflow: "hidden",
+                        border: "1px solid rgba(255,176,0,0.35)", display: "flex" }}>
+            <div style={{ flex: "1 1 55%", borderRight: "1px solid rgba(255,255,255,0.08)" }}>
+              <iframe src={`/api/resume/${data.variant}?inline=1`}
+                      title={`${data.variant} resume`}
+                      style={{ width: "100%", height: "100%", border: 0,
+                               background: "#fff" }} />
+            </div>
+            <div style={{ flex: "1 1 45%", padding: 20, overflowY: "auto",
+                          color: "var(--text)" }}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="eyebrow">ats report · {data.variant}</div>
+                  <div className="display text-4xl font-extrabold"
+                       style={{ color: scoreColor(report?.score ?? 0) }}>
+                    {report?.score}<span className="text-base font-normal"
+                                         style={{ color: "var(--text-faint)" }}>/100</span>
+                  </div>
+                </div>
+                <button onClick={() => setOpen(false)}
+                        className="btn-ghost px-3 py-1 text-xs">✕ close</button>
+              </div>
+              {r && (
+                <>
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                    {Object.entries(r.breakdown).map(([k, v]) => (
+                      <div key={k} className="panel px-3 py-2">
+                        <div className="eyebrow">{k.replace("_", " ")}</div>
+                        <div className="font-bold">{v}</div>
+                      </div>
+                    ))}
+                    <div className="panel px-3 py-2">
+                      <div className="eyebrow">keywords</div>
+                      <div className="font-bold">{Math.round(r.keyword_coverage * 100)}%</div>
+                    </div>
+                    <div className="panel px-3 py-2">
+                      <div className="eyebrow">pages / words / attempts</div>
+                      <div className="font-bold">{r.pages} / {r.words} / {r.attempts}</div>
+                    </div>
+                  </div>
+                  <div className="eyebrow mt-5 mb-2">violations</div>
+                  {r.issues.length ? (
+                    <ul className="list-disc space-y-1 pl-4 text-[11px]"
+                        style={{ color: "var(--text-dim)" }}>
+                      {r.issues.map((i, idx) => <li key={idx}>{i}</li>)}
+                    </ul>
+                  ) : (
+                    <div className="text-xs" style={{ color: "var(--green)" }}>
+                      Clean pass — no violations under the current rubric.
+                    </div>
+                  )}
+                  <div className="eyebrow mt-4">scored {report?.timestamp} · rubric: impact 35
+                    / brevity 20 / style 15 / sections 15 / soft-skills 15 (ResumeWorded-replica)</div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
