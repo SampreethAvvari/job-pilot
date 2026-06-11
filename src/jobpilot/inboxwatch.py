@@ -66,6 +66,44 @@ Return JSON: {{"findings": [{{"message_index", "classification", "is_interview",
 "company", "reason", "job_id"}}]}}"""
 
 
+def body_text(payload: dict) -> str:
+    """Best-effort plain-text body from a Gmail payload ('' if none — caller falls
+    back to the snippet)."""
+    if payload.get("mimeType", "").startswith("text/plain"):
+        data = payload.get("body", {}).get("data", "")
+        if data:
+            return base64.urlsafe_b64decode(data + "===").decode("utf-8", errors="replace")
+    for part in payload.get("parts", []) or []:
+        text = body_text(part)
+        if text:
+            return text
+    return ""
+
+
+def fetch_messages(creds, lookback_days: int, max_messages: int) -> list[dict]:
+    svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
+    query = f"in:inbox newer_than:{lookback_days}d -category:promotions -category:social"
+    listing = (
+        svc.users().messages()
+        .list(userId="me", q=query, maxResults=max_messages)
+        .execute()
+    )
+    out = []
+    for ref in listing.get("messages", []):
+        msg = svc.users().messages().get(userId="me", id=ref["id"], format="full").execute()
+        headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+        out.append(
+            {
+                "id": msg["id"],
+                "from": headers.get("From", ""),
+                "subject": headers.get("Subject", ""),
+                "snippet": msg.get("snippet", ""),
+                "body": (body_text(msg.get("payload", {})) or msg.get("snippet", ""))[:BODY_CHARS],
+            }
+        )
+    return out
+
+
 def forward_only(current: str, proposed: str | None) -> str | None:
     if proposed is None:
         return None

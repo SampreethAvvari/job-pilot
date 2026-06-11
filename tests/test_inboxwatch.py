@@ -1,6 +1,7 @@
+import base64
 import json
 
-from jobpilot.inboxwatch import Finding, classify, forward_only, status_for
+from jobpilot.inboxwatch import Finding, body_text, classify, forward_only, status_for
 
 MESSAGES = [
     {"id": "m1", "from": "recruiter@acme.com", "subject": "Interview availability",
@@ -51,6 +52,32 @@ def test_forward_only_transitions():
     assert forward_only("Interview", "Response") is None  # never downgrade
     assert forward_only("Applied", "Rejected") == "Rejected"  # terminal always allowed
     assert forward_only("Applied", None) is None
+
+
+def b64(s: str) -> str:
+    return base64.urlsafe_b64encode(s.encode()).decode()
+
+
+def test_body_text_plain():
+    payload = {"mimeType": "text/plain", "body": {"data": b64("hello")}}
+    assert body_text(payload) == "hello"
+
+
+def test_body_text_nested_multipart():
+    payload = {
+        "mimeType": "multipart/alternative",
+        "parts": [
+            {"mimeType": "text/html", "body": {"data": b64("<b>hi</b>")}},
+            {"mimeType": "multipart/mixed",
+             "parts": [{"mimeType": "text/plain", "body": {"data": b64("inner text")}}]},
+        ],
+    }
+    assert body_text(payload) == "inner text"
+
+
+def test_body_text_html_only_returns_empty():
+    payload = {"mimeType": "text/html", "body": {"data": b64("<b>hi</b>")}}
+    assert body_text(payload) == ""
 
 
 def test_status_for_mapping():
