@@ -46,6 +46,15 @@ def test_signature_has_name_and_links():
     assert "https://github.com/janedoe" in s
 
 
+def test_strip_closing_removes_llm_signoff():
+    from jobpilot.outreach import strip_closing
+
+    body = "I would appreciate a brief chat.\n\nThanks,\n\nBest,\nJane Doe Candidate"
+    assert strip_closing(body, "Jane Doe Candidate") == "I would appreciate a brief chat."
+    # real content is never stripped
+    assert strip_closing("I said thanks to the team.", "X") == "I said thanks to the team."
+
+
 def test_signature_skips_empty_links():
     cfg = make_cfg()
     cfg.profile.portfolio = ""

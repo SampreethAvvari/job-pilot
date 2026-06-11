@@ -35,6 +35,20 @@ def _gmail(creds):
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
 
+_CLOSING = re.compile(
+    r"^(thanks|thank you|best|best regards|kind regards|warm regards|regards|"
+    r"sincerely|cheers)[,.!]?$", re.IGNORECASE)
+
+
+def strip_closing(body: str, name: str) -> str:
+    """Drop the LLM's own sign-off so the appended signature is the only one."""
+    lines = body.rstrip().splitlines()
+    while lines and (not lines[-1].strip() or _CLOSING.match(lines[-1].strip())
+                     or lines[-1].strip() == name):
+        lines.pop()
+    return "\n".join(lines).rstrip()
+
+
 def signature(profile: Profile) -> str:
     """Deterministic signature block — never left to the LLM."""
     links = [(label, url) for label, url in (
@@ -116,7 +130,7 @@ def outreach_row(creds, spreadsheet_id: str, row: dict, cfg: Config,
             ])
             return f"outreach skipped for {company}: no recruiter email found"
         draft = draft_outreach(row, cfg, llm, contact)
-        body = f"{draft.body.rstrip()}\n\n{signature(cfg.profile)}\n"
+        body = f"{strip_closing(draft.body, cfg.profile.name)}\n\n{signature(cfg.profile)}\n"
         attachment = None
         pdf = _drive_pdf_bytes(creds, row.get("Tailored resume", ""))
         if pdf:
