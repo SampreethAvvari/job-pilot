@@ -6,7 +6,7 @@ export const HEADERS = [
   "Posted age", "URL", "Source", "Fit", "Why", "Sponsorship", "Resume variant",
   "Status", "Notes", "Applied date", "Last reply", "Reply class",
   "Tailored resume", "Cover letter", "JD keywords", "JD excerpt",
-  "Contact", "Draft", "Find people", "Role",
+  "Contact", "Draft", "Find people", "Role", "Resume ATS",
 ] as const;
 
 export const ROLES = ["FDE", "AIE", "MLE", "DE", "DS", "SWE", "Other"] as const;
@@ -56,4 +56,5 @@ export type Job = {
   draft: string;
   findPeople: string;
   role: string;
+  resumeAts: string;
 };

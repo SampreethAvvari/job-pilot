@@ -41,7 +41,13 @@ class Tailoring(_Strict):
     enabled: bool = True
     auto_threshold: int = 60  # auto-tailor jobs scoring at/above this
     max_per_run: int = 15  # compute cap per pipeline run
+    attempts: int = 10  # judge-driven rewrite loop: best of up to N attempts
     drive_folder: str = "JobPilot Resumes/Tailored"
+
+
+class Masters(_Strict):
+    """Drive file ids of the master resume PDFs, per variant (for regeneration)."""
+    pdf_ids: dict[str, str] = {}
 
 
 class Caps(_Strict):
@@ -93,6 +99,7 @@ class Config(_Strict):
     sources: dict[str, SourceCfg]
     scoring: Scoring = Scoring()
     tailoring: Tailoring = Tailoring()
+    masters: Masters = Masters()
     caps: Caps = Caps()
     sheet: SheetCfg = SheetCfg()
     digest: DigestCfg

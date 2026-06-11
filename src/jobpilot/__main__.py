@@ -17,9 +17,25 @@ def main() -> None:
     parser.add_argument("--outreach-job", default="", help="draft outreach for one Job ID")
     parser.add_argument("--fast", action="store_true",
                         help="fetch+score+record only (console refresh)")
+    parser.add_argument("--rebuild-resume", default="",
+                        help="regenerate a master resume variant through the judge loop")
     args = parser.parse_args()
 
     cfg = Config.load(args.config)
+
+    if args.rebuild_resume:
+        import os
+        from datetime import datetime, timezone
+
+        from jobpilot.gauth import credentials
+        from jobpilot.rebuild import rebuild_master
+        from jobpilot.tailor import make_tailor_llm
+
+        creds = credentials()
+        sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
+        print(rebuild_master(creds, sid, args.rebuild_resume.upper(), cfg,
+                             make_tailor_llm(cfg), datetime.now(timezone.utc)))
+        return
 
     if args.tailor_job or args.outreach_job:
         import os

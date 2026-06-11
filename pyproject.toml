@@ -12,6 +12,7 @@ dependencies = [
     "google-auth-oauthlib>=1.2",
     "google-genai>=1.0",
     "pypdf>=4.0",
+    "google-cloud-secret-manager>=2.20",
 ]
 
 [project.optional-dependencies]

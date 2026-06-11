@@ -18,6 +18,7 @@ function toJob(row: number, v: string[]): Job {
     tailoredResume: g(19), coverLetter: g(20), jdKeywords: g(21),
     contact: g(23), draft: g(24), findPeople: g(25), // 22 = JD excerpt, omitted
     role: g(26),
+    resumeAts: g(27),
   };
 }
 

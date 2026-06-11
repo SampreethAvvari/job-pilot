@@ -297,6 +297,14 @@ export function JobsTable({
                           Cover ⬇
                         </a>
                       )}
+                      {j.resumeAts && (
+                        <a href={`/api/reports?kind=job&key=${j.id}`} target="_blank"
+                           rel="noopener" className="hover:underline"
+                           title="Open the full ATS report"
+                           style={{ color: Number(j.resumeAts) >= 90 ? "var(--green)" : "var(--amber)" }}>
+                          ATS {j.resumeAts}
+                        </a>
+                      )}
                     </span>
                   ) : tailoring.has(j.row) ? (
                     <span className="blink text-[11px]" style={{ color: "var(--amber)" }}>

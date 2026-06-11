@@ -14,7 +14,7 @@ HEADERS = [
     "Posted age", "URL", "Source", "Fit", "Why", "Sponsorship", "Resume variant",
     "Status", "Notes", "Applied date", "Last reply", "Reply class",
     "Tailored resume", "Cover letter", "JD keywords", "JD excerpt",
-    "Contact", "Draft", "Find people", "Role",
+    "Contact", "Draft", "Find people", "Role", "Resume ATS",
 ]
 
 
@@ -79,6 +79,7 @@ def to_row(s: Scored, now: datetime) -> list:
         "",  # Draft (outreach)
         "",  # Find people (outreach)
         s.role_category,
+        "",  # Resume ATS (judge score for the tailored resume)
     ]
 
 
@@ -186,6 +187,32 @@ def append_jobs(creds, spreadsheet_id: str, scored: list[Scored], now: datetime)
 
 def url_for(spreadsheet_id: str) -> str:
     return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}"
+
+
+def ensure_reports_tab(creds, spreadsheet_id: str) -> None:
+    svc = _svc(creds)
+    meta = svc.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    titles = [s["properties"]["title"] for s in meta["sheets"]]
+    if "Reports" in titles:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": "Reports"}}}]},
+    ).execute()
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="Reports!A1", valueInputOption="RAW",
+        body={"values": [["Timestamp", "Kind", "Key", "Score", "Report JSON"]]},
+    ).execute()
+
+
+def append_report(creds, spreadsheet_id: str, kind: str, key: str,
+                  score: float, report_json: str, timestamp: str) -> None:
+    ensure_reports_tab(creds, spreadsheet_id)
+    _svc(creds).spreadsheets().values().append(
+        spreadsheetId=spreadsheet_id, range="Reports!A1",
+        valueInputOption="RAW", insertDataOption="INSERT_ROWS",
+        body={"values": [[timestamp, kind, key, score, report_json[:49000]]]},
+    ).execute()
 
 
 def read_rows(creds, spreadsheet_id: str) -> list[dict]:

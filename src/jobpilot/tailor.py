@@ -56,9 +56,7 @@ def _build_prompt(company: str, title: str, description: str, variant: str) -> s
     )
 
 
-def generate(company: str, title: str, description: str, variant: str,
-             llm: Callable[[str], str]) -> TailorResult:
-    prompt = _build_prompt(company, title, description, variant)
+def generate_from_prompt(prompt: str, llm: Callable[[str], str]) -> TailorResult:
     last_err: Exception | None = None
     for _ in range(2):
         try:
@@ -66,6 +64,11 @@ def generate(company: str, title: str, description: str, variant: str,
         except Exception as exc:  # malformed output — retry once
             last_err = exc
     raise CompileError(f"tailor generation failed: {last_err}")
+
+
+def generate(company: str, title: str, description: str, variant: str,
+             llm: Callable[[str], str]) -> TailorResult:
+    return generate_from_prompt(_build_prompt(company, title, description, variant), llm)
 
 
 def _drive(creds):
@@ -97,19 +100,35 @@ def upload_pdf(creds, folder_id: str, filename: str, pdf: bytes) -> str:
 
 def tailor_row(creds, spreadsheet_id: str, row: dict, cfg: Config,
                llm: Callable[[str], str], now: datetime) -> str:
-    """Tailor one sheet row; writes links/keywords back. Returns a note string."""
+    """Tailor one sheet row through the judge-driven rewrite loop."""
+    from jobpilot.judge import KEYWORDS
+    from jobpilot.rewrite_loop import REWRITE_RULES, best_of_attempts, report_json
+
     company, title = row["Company"], row["Title"]
     variant = row.get("Resume variant") or "FDE"
     description = row.get("JD excerpt") or ""
     try:
-        result = generate(company, title, description, variant, llm)
-        resume_pdf, pages = compile_pdf(result.tailored_tex, f"{company}_{variant}")
-        if pages > 1:  # one retry with explicit instruction to cut
-            retry_llm = lambda p: llm(  # noqa: E731
-                p + "\nIMPORTANT: your previous attempt overflowed one page. "
-                    "Cut the two least relevant bullets.")
-            result = generate(company, title, description, variant, retry_llm)
-            resume_pdf, pages = compile_pdf(result.tailored_tex, f"{company}_{variant}")
+        base_prompt = _build_prompt(company, title, description, variant)
+        extras: dict[int, TailorResult] = {}
+
+        def run_llm(prompt: str) -> TailorResult:
+            result = generate_from_prompt(prompt, llm)
+            extras[id(result.tailored_tex)] = result
+            return result
+
+        first = run_llm(base_prompt + "\n" + REWRITE_RULES)
+
+        def regen(prev_tex: str, issues: list[str]) -> str:
+            fb = "\n".join(f"- {i}" for i in issues[:25])
+            prompt = (base_prompt + "\n" + REWRITE_RULES
+                      + "\nPREVIOUS DRAFT (revise it, do not start over):\n" + prev_tex
+                      + "\nSCORER VIOLATIONS TO FIX (fix every one):\n" + fb)
+            return run_llm(prompt).tailored_tex
+
+        tex, resume_pdf, report, attempts = best_of_attempts(
+            first.tailored_tex, KEYWORDS.get(variant, []), regen,
+            f"{company}_{variant}", max_attempts=cfg.tailoring.attempts)
+        result = extras.get(id(tex), first)
         cover_pdf, _ = compile_pdf(result.cover_letter_tex, f"{company}_cover")
 
         drive = _drive(creds)
@@ -124,8 +143,13 @@ def tailor_row(creds, spreadsheet_id: str, row: dict, cfg: Config,
             (row["_row"], "Tailored resume", resume_url),
             (row["_row"], "Cover letter", cover_url),
             (row["_row"], "JD keywords", ", ".join(result.keywords)),
+            (row["_row"], "Resume ATS", report["score"]),
         ])
-        return f"tailored: {company} — {title} ({variant})"
+        sheets.append_report(creds, spreadsheet_id, "job", row["Job ID"],
+                             report["score"], report_json(report),
+                             now.strftime("%Y-%m-%d %H:%M"))
+        return (f"tailored: {company} — {title} ({variant}) "
+                f"ATS {report['score']} in {attempts} attempt(s)")
     except Exception as exc:  # noqa: BLE001 — one failure must not kill the batch
         return f"tailor FAILED for {company} — {title}: {type(exc).__name__}: {exc}"
 
