@@ -37,6 +37,9 @@ def _stub_llm(prompt: str) -> str:
 
 
 def fetch_all(cfg: Config, only: list[str] | None = None) -> tuple[list[Posting], list[str]]:
+    from jobpilot.sources import common
+
+    common.RUN_STATS.clear()
     client = httpx.Client(timeout=60, follow_redirects=True)
     postings: list[Posting] = []
     notes: list[str] = []
@@ -72,18 +75,23 @@ def quality_filter(postings: list[Posting], cfg: Config, now: datetime) -> list[
     return out
 
 
-def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
-        fast: bool = False) -> list[Scored]:
-    now = datetime.now(timezone.utc)
-    postings, notes = fetch_all(cfg, only)
+def _apply_quality_filter(postings: list[Posting], cfg: Config, now: datetime,
+                          notes: list[str]) -> list[Posting]:
     fresh = quality_filter(postings, cfg, now)
     notes.append(
         f"freshness/seniority filter: kept {len(fresh)} of {len(postings)} "
         f"(window {cfg.caps.freshness_days}d)"
     )
-    postings = fresh
+    return fresh
+
+
+def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
+        fast: bool = False) -> list[Scored]:
+    now = datetime.now(timezone.utc)
 
     if dry_run:
+        postings, notes = fetch_all(cfg, only)
+        postings = _apply_quality_filter(postings, cfg, now, notes)
         new = dedup.filter_new(postings, set())
         scored = score(new, cfg, _stub_llm)
         notes.append(f"dedup: {len(new)} new of {len(postings)} fetched (no sheet in dry-run)")
@@ -93,12 +101,27 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
         print(f"\n{len(scored)} jobs; digest preview -> digest_preview.html")
         return scored
 
-    from jobpilot import inboxwatch
+    from jobpilot import companies, inboxwatch, resolver
     from jobpilot.gauth import credentials, inbox_credentials
+    from jobpilot.sources import common as sources_common
 
     creds = credentials()
     sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
     sid = sheets.ensure_dashboard(creds, sid)
+
+    watchlist = companies.load(creds, sid)
+    resolver_notes = resolver.resolve_pending(watchlist)
+    companies.merge_into_sources(cfg, watchlist)
+
+    postings, notes = fetch_all(cfg, only)
+    notes.extend(resolver_notes)
+    sheets.update_company_rows(
+        creds, sid,
+        companies.status_updates(watchlist, sources_common.RUN_STATS,
+                                 now.strftime("%Y-%m-%d %H:%M")),
+    )
+    postings = _apply_quality_filter(postings, cfg, now, notes)
+
     llm = make_gemini_llm(cfg)
     new = dedup.filter_new(postings, sheets.known_ids(creds, sid))
     notes.append(f"dedup: {len(new)} new of {len(postings)} fetched")
