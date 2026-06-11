@@ -23,10 +23,15 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
 
 
+def key(company: str, title: str) -> str:
+    """Stable cross-source id from normalized company+title. Location is
+    deliberately excluded: boards list one role per metro, and each location
+    spelling was hashing to a "new" job (BL-20)."""
+    return hashlib.sha1(f"{_norm(company)}|{_norm(title)}".encode()).hexdigest()[:16]
+
+
 def job_id(p: Posting) -> str:
-    """Stable cross-source id from normalized company+title+location."""
-    key = f"{_norm(p.company)}|{_norm(p.title)}|{_norm(p.location)}"
-    return hashlib.sha1(key.encode()).hexdigest()[:16]
+    return key(p.company, p.title)
 
 
 def filter_new(postings: list[Posting], known_ids: set[str]) -> list[Posting]:

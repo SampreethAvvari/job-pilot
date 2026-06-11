@@ -104,3 +104,9 @@ Format: **Symptom → Root cause → Fix → Guard now in place.**
 - **Root cause:** two distinct Gmail messages (per-message dedup worked correctly), but the classifier prompt had no rule for transactional identity/OTP mail — "Confirm your identity for job X" pattern-matched "real progression", so each message alerted.
 - **Fix:** (1) prompt now states verification/OTP/password emails are automated_ack, NEVER next_step; (2) deterministic guard `is_verification()` downgrades any next_step whose subject/body matches OTP patterns before alerting — belt and braces over the LLM.
 - **Guard (related window):** `watch()` now appends the InboxWatch dedup log *before* the Jobs-sheet update; previously a transient `update_cells` failure skipped the log append and every alerted message would re-alert the next run.
+
+### BL-20 · Same job appeared again and again in the Jobs tab
+- **Symptom:** Oracle "Software Developer 4" ×5 rows, Deloitte "Agentic AI Engineer" ×4, … (23 duplicate groups of 426 rows).
+- **Root cause:** the dedup key hashed company+title+**location**, and boards list one role per metro (Adzuna county-level spellings, LinkedIn per-city reposts) — every location variant hashed to a "new" job. Zero exact-id duplicates: the mechanism worked; the key was wrong.
+- **Fix:** `dedup.key()` is company+title only; in-batch collapse keeps the highest-fidelity source. `sheets.known_ids()` now **recomputes** keys from the Title+Company columns instead of reading the stored Job ID column — old rows carry location-based ids that would never match the new scheme and everything would have been re-added once.
+- **Trade-off (accepted):** genuinely distinct same-title reqs in different cities collapse to one row; for an apply-once dashboard that is the right granularity.

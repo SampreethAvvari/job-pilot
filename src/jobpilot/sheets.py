@@ -163,14 +163,25 @@ def ensure_dashboard(creds, spreadsheet_id: str) -> str:
 
 
 def known_ids(creds, spreadsheet_id: str) -> set[str]:
+    """Dedup keys recomputed from Title+Company — NOT the stored Job ID column.
+
+    Stored ids written before BL-20 hashed location into the key, so matching
+    against them would re-add every already-seen job under the new scheme.
+    """
+    from jobpilot import dedup
+
     resp = (
         _svc(creds)
         .spreadsheets()
         .values()
-        .get(spreadsheetId=spreadsheet_id, range="Jobs!B2:B")
+        .get(spreadsheetId=spreadsheet_id, range="Jobs!C2:D")
         .execute()
     )
-    return {row[0] for row in resp.get("values", []) if row}
+    return {
+        dedup.key(company=row[1], title=row[0])
+        for row in resp.get("values", [])
+        if len(row) >= 2
+    }
 
 
 def append_jobs(creds, spreadsheet_id: str, scored: list[Scored], now: datetime) -> None:
