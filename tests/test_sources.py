@@ -15,6 +15,7 @@ from jobpilot.sources import (
     hn_hiring,
     lever,
     remoteok,
+    smartrecruiters,
     workday,
 )
 
@@ -187,6 +188,23 @@ def test_workday(httpx_mock):
     assert out[0].description == "Build ML systems."
     assert out[0].posted_at is not None
     assert out[0].url == "https://acme.wd5.myworkdayjobs.com/External/job/New-York/AI-Engineer_JR100"
+
+
+def test_smartrecruiters(httpx_mock):
+    httpx_mock.add_response(
+        url=re.compile(r".*api\.smartrecruiters\.com/v1/companies/Acme/postings\?.*"),
+        json=load("smartrecruiters"),
+    )
+    httpx_mock.add_response(
+        url=re.compile(r".*postings/744000001.*"),
+        json=load("smartrecruiters_detail"),
+    )
+    cfg = make_cfg(smartrecruiters={"companies": ["Acme"]})
+    out = smartrecruiters.fetch(cfg.sources["smartrecruiters"], cfg, httpx.Client())
+    _assert_valid(out, "smartrecruiters")
+    assert len(out) == 1  # Sales Lead filtered, no detail call for it
+    assert "Do ML." in out[0].description and "Python" in out[0].description
+    assert out[0].company == "Acme Corp"
 
 
 def test_greenhouse_per_company_cap(httpx_mock):

@@ -1,0 +1,8 @@
+{
+  "jobAd": {
+    "sections": {
+      "jobDescription": {"title": "Job Description", "text": "<p>Do ML.</p>"},
+      "qualifications": {"title": "Qualifications", "text": "<p>Python</p>"}
+    }
+  }
+}

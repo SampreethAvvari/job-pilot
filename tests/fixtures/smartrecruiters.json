@@ -1,0 +1,18 @@
+{
+  "content": [
+    {
+      "id": "744000001",
+      "name": "Machine Learning Engineer",
+      "releasedDate": "2026-06-09T10:00:00.000Z",
+      "location": {"city": "Austin", "region": "TX", "country": "us", "remote": false},
+      "company": {"name": "Acme Corp"}
+    },
+    {
+      "id": "744000002",
+      "name": "Sales Lead",
+      "releasedDate": "2026-06-09T10:00:00.000Z",
+      "location": {"city": "NYC", "country": "us"},
+      "company": {"name": "Acme Corp"}
+    }
+  ]
+}
