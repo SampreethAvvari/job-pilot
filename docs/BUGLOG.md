@@ -98,3 +98,9 @@ Format: **Symptom → Root cause → Fix → Guard now in place.**
 - **Root cause:** `make_gemini_llm` baked `response_schema=_ScoreBatch` into every call, so the scanner's prompt (expecting `{"matches": ...}`) always got `{"scores": ...}` back; `_MatchBatch.model_validate_json` failed and `classify()` silently returned `[]` — the catch-all that "must never break the run" also never told anyone.
 - **Fix:** `make_gemini_llm(cfg, schema=...)` — schema is per call site; the scanner's replacement (`inboxwatch.py`) passes its own `FindingBatch`.
 - **Guard:** a shared LLM wrapper with a baked-in response schema silently breaks every other caller — when a "degrade, never raise" path returns empty, make sure the empty case is distinguishable from "nothing to do" (the InboxWatch tab now logs every judged message).
+
+### BL-19 · Inbox watch alerted twice on Ford OTP emails
+- **Symptom:** two "🎯 Ford Motor responded" alerts; both were "Confirm your identity" one-time-passcode emails, not real next steps.
+- **Root cause:** two distinct Gmail messages (per-message dedup worked correctly), but the classifier prompt had no rule for transactional identity/OTP mail — "Confirm your identity for job X" pattern-matched "real progression", so each message alerted.
+- **Fix:** (1) prompt now states verification/OTP/password emails are automated_ack, NEVER next_step; (2) deterministic guard `is_verification()` downgrades any next_step whose subject/body matches OTP patterns before alerting — belt and braces over the LLM.
+- **Guard (related window):** `watch()` now appends the InboxWatch dedup log *before* the Jobs-sheet update; previously a transient `update_cells` failure skipped the log append and every alerted message would re-alert the next run.

@@ -166,6 +166,34 @@ def test_process_out_of_range_index_ignored():
     assert log_rows == [] and updates == [] and alerts == []
 
 
+OTP_MSG = {"id": "m3", "from": "Ford Careers <RecruitingNoReply@ford.com>",
+           "subject": "Confirm your identity for job Full-Stack Software Engineer - 63783",
+           "snippet": "s", "body": "Use this one-time passcode to continue: 482913"}
+
+
+def test_is_verification_matches_transactional_mail():
+    for subject in ["Confirm your identity", "Your verification code is 123456",
+                    "Your one-time passcode", "Verify your email address",
+                    "Password reset requested"]:
+        assert iw.is_verification({"subject": subject, "body": ""}), subject
+    for subject in ["Interview availability", "Next steps for your application",
+                    "Please send your portfolio"]:
+        assert not iw.is_verification({"subject": subject, "body": ""}), subject
+
+
+def test_process_verification_email_never_alerts():
+    # the Ford bug: LLM says next_step, but an OTP email must not alert
+    llm_says = [Finding(message_index=0, classification="next_step",
+                        company="Ford Motor", reason="asks to confirm identity")]
+    log_rows, updates, alerts = process("me@gmail.com", [OTP_MSG], llm_says, BY_ID, NOW)
+    assert alerts == []
+    assert log_rows[0][5] == "automated_ack" and log_rows[0][7] == ""
+
+
+def test_prompt_forbids_verification_as_next_step():
+    assert "passcode" in iw.PROMPT and "NEVER next_step" in iw.PROMPT
+
+
 class _FakeGmail:
     def users(self):
         return self
@@ -216,6 +244,31 @@ def test_watch_dedups_seen_messages_and_alerts(monkeypatch):
     assert sent == ["🎯 Acme responded — check primary@nyu.edu"]
     assert len(appended) == 1
     assert notes == ["inbox-watch primary@nyu.edu: 1 new emails, 1 alerts"]
+
+
+def test_watch_writes_dedup_log_even_when_jobs_update_fails(monkeypatch):
+    # if the dedup log is not written before the Jobs-sheet update, a transient
+    # update failure makes every alerted email alert again next run
+    appended = []
+    monkeypatch.setattr(iw, "build", lambda *a, **k: _FakeGmail())
+    monkeypatch.setattr(iw.sheets, "inboxwatch_keys", lambda c, s: set())
+    monkeypatch.setattr(iw.sheets, "read_rows", lambda c, s: list(BY_ID.values()))
+    monkeypatch.setattr(iw.sheets, "append_inboxwatch_rows",
+                        lambda c, s, r: appended.extend(r))
+
+    def boom(creds, sid, updates):
+        raise RuntimeError("Sheets quota")
+
+    monkeypatch.setattr(iw.sheets, "update_cells", boom)
+    monkeypatch.setattr(iw, "fetch_messages", lambda c, d, m: list(MESSAGES))
+    monkeypatch.setattr(iw, "send_alert", lambda c, to, s, b: None)
+    llm = llm_returning([
+        {"message_index": 0, "classification": "next_step", "is_interview": True,
+         "company": "Acme", "reason": "availability", "job_id": "abc"},
+        {"message_index": 1, "classification": "automated_ack", "company": "Beta"}])
+    notes = watch("creds", {}, "sid", make_cfg(), llm, NOW)
+    assert "FAILED" in notes[0]
+    assert len(appended) == 2  # both judged messages logged despite the failure
 
 
 def test_watch_disabled_returns_empty():

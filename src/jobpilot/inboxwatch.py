@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import html
 import json
+import re
 from datetime import datetime
 from email.mime.text import MIMEText
 from typing import Callable, Literal
@@ -49,7 +50,10 @@ Classifications:
   link, an online-assessment (HackerRank/Codility/...) invite, or a request for
   documents, portfolio, or references. Set is_interview=true when it invites or
   schedules an interview, call, or phone screen.
-- automated_ack: automated "application received / thanks for applying" confirmations.
+- automated_ack: automated "application received / thanks for applying" confirmations,
+  and transactional account emails from a careers site: identity/email verification,
+  one-time passcodes (OTP), security or login codes, password resets. A "confirm your
+  identity" or verification-code email is NEVER next_step, even when it names the job.
 - rejection: any rejection, automated or personal.
 - unrelated: everything else — newsletters, job alerts/boards, promotions, personal
   mail, and JobPilot's own digests and alerts.
@@ -64,6 +68,19 @@ EMAILS (JSON): {emails}
 
 Return JSON: {{"findings": [{{"message_index", "classification", "is_interview",
 "company", "reason", "job_id"}}]}}"""
+
+
+VERIFICATION_RE = re.compile(
+    r"one[- ]?time (pass)?code|passcode|verification (code|link)|security code|"
+    r"login (code|link)|confirm your (identity|email)|"
+    r"verify your (identity|email|account)|confirmation code|password reset|\botp\b",
+    re.IGNORECASE,
+)
+
+
+def is_verification(msg: dict) -> bool:
+    """Transactional identity/OTP mail — never a next step, whatever the LLM says."""
+    return bool(VERIFICATION_RE.search(f"{msg['subject']}\n{msg['body']}"))
 
 
 def body_text(payload: dict) -> str:
@@ -186,6 +203,8 @@ def process(
         if not 0 <= f.message_index < len(messages):
             continue
         m = messages[f.message_index]
+        if f.classification == "next_step" and is_verification(m):
+            f = f.model_copy(update={"classification": "automated_ack", "is_interview": False})
         alerted = ""
         if f.classification == "next_step":
             alerts.append(build_alert(account, m, f))
@@ -233,8 +252,10 @@ def watch(primary_creds, inbox_creds: dict, spreadsheet_id: str, cfg: Config,
             log_rows, updates, alerts = process(account, fresh, findings, by_id, now)
             for subject, body in alerts:
                 send_alert(primary_creds, cfg.digest.to, subject, body)
-            sheets.update_cells(primary_creds, spreadsheet_id, updates)
+            # dedup log MUST land before the Jobs-sheet update: if it doesn't,
+            # a transient update failure re-alerts every message next run
             sheets.append_inboxwatch_rows(primary_creds, spreadsheet_id, log_rows)
+            sheets.update_cells(primary_creds, spreadsheet_id, updates)
             notes.append(
                 f"inbox-watch {account}: {len(fresh)} new emails, {len(alerts)} alerts"
             )
