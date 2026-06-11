@@ -215,6 +215,50 @@ def append_report(creds, spreadsheet_id: str, kind: str, key: str,
     ).execute()
 
 
+INBOXWATCH_HEADERS = [
+    "Checked at", "Key", "Account", "From", "Subject", "Class", "Company", "Alerted",
+]
+
+
+def ensure_inboxwatch_tab(creds, spreadsheet_id: str) -> None:
+    svc = _svc(creds)
+    meta = svc.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    titles = [s["properties"]["title"] for s in meta["sheets"]]
+    if "InboxWatch" in titles:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": "InboxWatch"}}}]},
+    ).execute()
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="InboxWatch!A1", valueInputOption="RAW",
+        body={"values": [INBOXWATCH_HEADERS]},
+    ).execute()
+
+
+def inboxwatch_keys(creds, spreadsheet_id: str) -> set[str]:
+    """Dedup set: '{account}:{message_id}' for every message ever judged."""
+    ensure_inboxwatch_tab(creds, spreadsheet_id)
+    resp = (
+        _svc(creds)
+        .spreadsheets()
+        .values()
+        .get(spreadsheetId=spreadsheet_id, range="InboxWatch!B2:B")
+        .execute()
+    )
+    return {row[0] for row in resp.get("values", []) if row}
+
+
+def append_inboxwatch_rows(creds, spreadsheet_id: str, rows: list[list]) -> None:
+    if not rows:
+        return
+    _svc(creds).spreadsheets().values().append(
+        spreadsheetId=spreadsheet_id, range="InboxWatch!A1",
+        valueInputOption="RAW", insertDataOption="INSERT_ROWS",
+        body={"values": rows},
+    ).execute()
+
+
 def read_rows(creds, spreadsheet_id: str) -> list[dict]:
     """All job rows as dicts keyed by header, with 1-based sheet row numbers."""
     resp = (
