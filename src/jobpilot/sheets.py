@@ -270,6 +270,57 @@ def append_inboxwatch_rows(creds, spreadsheet_id: str, rows: list[list]) -> None
     ).execute()
 
 
+COMPANIES_HEADERS = [
+    "Company", "Careers URL", "ATS", "Slug", "Status", "Last checked",
+    "Jobs (last fetch)", "Notes",
+]
+
+
+def ensure_companies_tab(creds, spreadsheet_id: str) -> None:
+    svc = _svc(creds)
+    meta = svc.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    titles = [s["properties"]["title"] for s in meta["sheets"]]
+    if "Companies" in titles:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": "Companies"}}}]},
+    ).execute()
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="Companies!A1", valueInputOption="RAW",
+        body={"values": [COMPANIES_HEADERS]},
+    ).execute()
+
+
+def read_companies(creds, spreadsheet_id: str) -> list[dict]:
+    """Companies tab rows as dicts keyed by header, with 1-based row numbers."""
+    ensure_companies_tab(creds, spreadsheet_id)
+    resp = (
+        _svc(creds)
+        .spreadsheets()
+        .values()
+        .get(spreadsheetId=spreadsheet_id, range="Companies!A2:H")
+        .execute()
+    )
+    rows = []
+    for i, values in enumerate(resp.get("values", []), start=2):
+        padded = values + [""] * (len(COMPANIES_HEADERS) - len(values))
+        rows.append({"_row": i, **dict(zip(COMPANIES_HEADERS, padded))})
+    return rows
+
+
+def update_company_rows(creds, spreadsheet_id: str,
+                        updates: list[tuple[int, list[str]]]) -> None:
+    """Batch-write C..H (ATS, Slug, Status, Last checked, Jobs, Notes) per row."""
+    if not updates:
+        return
+    data = [{"range": f"Companies!C{row}", "values": [vals]} for row, vals in updates]
+    _svc(creds).spreadsheets().values().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"valueInputOption": "RAW", "data": data},
+    ).execute()
+
+
 def read_rows(creds, spreadsheet_id: str) -> list[dict]:
     """All job rows as dicts keyed by header, with 1-based sheet row numbers."""
     resp = (
