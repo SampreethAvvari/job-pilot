@@ -7,7 +7,16 @@ import pytest
 
 from jobpilot.config import Config
 from jobpilot.sources import SourceSkipped, registry
-from jobpilot.sources import adzuna, apify_linkedin, ashby, greenhouse, hn_hiring, lever, remoteok
+from jobpilot.sources import (
+    adzuna,
+    apify_linkedin,
+    ashby,
+    greenhouse,
+    hn_hiring,
+    lever,
+    remoteok,
+    workday,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -159,6 +168,25 @@ def test_apify(httpx_mock, monkeypatch):
     out = apify_linkedin.fetch(cfg.sources["apify_linkedin"], cfg, httpx.Client())
     _assert_valid(out, "linkedin")
     assert out[0].description == "desc"
+
+
+def test_workday(httpx_mock):
+    httpx_mock.add_response(
+        method="POST",
+        url=re.compile(r".*myworkdayjobs.*/wday/cxs/.*/jobs"),
+        json=load("workday"),
+    )
+    httpx_mock.add_response(
+        url=re.compile(r".*myworkdayjobs.*JR100.*"),
+        json=load("workday_detail"),
+    )
+    cfg = make_cfg(workday={"companies": ["acme/wd5/External"]})
+    out = workday.fetch(cfg.sources["workday"], cfg, httpx.Client())
+    _assert_valid(out, "workday")
+    assert len(out) == 1  # Accountant filtered before any detail fetch
+    assert out[0].description == "Build ML systems."
+    assert out[0].posted_at is not None
+    assert out[0].url == "https://acme.wd5.myworkdayjobs.com/External/job/New-York/AI-Engineer_JR100"
 
 
 def test_greenhouse_per_company_cap(httpx_mock):

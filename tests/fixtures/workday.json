@@ -1,0 +1,17 @@
+{
+  "total": 2,
+  "jobPostings": [
+    {
+      "title": "AI Engineer",
+      "externalPath": "/job/New-York/AI-Engineer_JR100",
+      "locationsText": "New York",
+      "postedOn": "Posted Today"
+    },
+    {
+      "title": "Accountant",
+      "externalPath": "/job/Austin/Accountant_JR101",
+      "locationsText": "Austin",
+      "postedOn": "Posted Today"
+    }
+  ]
+}
