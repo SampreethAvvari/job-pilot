@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import type { Company } from "@/lib/types";
@@ -102,10 +103,15 @@ export function CompaniesTable({ initial }: { initial: Company[] }) {
             {companies.map((c) => (
               <tr key={c.row}>
                 <td>
-                  {c.careersUrl ? (
-                    <a className="hover:underline" href={c.careersUrl} target="_blank"
-                       rel="noopener">{c.company}</a>
-                  ) : c.company}
+                  <Link className="hover:underline"
+                        href={`/companies/${encodeURIComponent(c.company)}`}>
+                    {c.company}
+                  </Link>
+                  {c.careersUrl && (
+                    <a className="ml-1 text-[10px] hover:underline" href={c.careersUrl}
+                       target="_blank" rel="noopener"
+                       style={{ color: "var(--text-faint)" }}>↗</a>
+                  )}
                 </td>
                 <td style={{ color: "var(--text-dim)" }}>{c.ats || "—"}</td>
                 <td style={{ color: statusColor(c.status) }}>{c.status || "pending"}</td>

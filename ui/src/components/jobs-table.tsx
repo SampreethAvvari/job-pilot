@@ -27,13 +27,15 @@ export function JobsTable({
   initial,
   mode,
   resumeLinks = {},
+  defaultStatus,
 }: {
   initial: Job[];
   mode: "open" | "applied";
   resumeLinks?: Record<string, string>;
+  defaultStatus?: string;
 }) {
   const [jobs, setJobs] = useState(initial);
-  const [status, setStatus] = useState(mode === "open" ? "New" : "all");
+  const [status, setStatus] = useState(defaultStatus ?? (mode === "open" ? "New" : "all"));
   const [source, setSource] = useState("all");
   const [role, setRole] = useState("all");
   const [size, setSize] = useState("all");
@@ -281,7 +283,8 @@ export function JobsTable({
                   )}
                 </td>
                 <td className="max-w-40 truncate" title={j.location}>{j.location}</td>
-                <td className="whitespace-nowrap" style={{ color: "var(--text-dim)" }}>
+                <td className="whitespace-nowrap" style={{ color: "var(--text-dim)" }}
+                    title={j.posted || "posting date unknown"}>
                   {j.postedAge}
                 </td>
                 <td style={{ color: "var(--text-dim)" }}>{j.source}</td>
