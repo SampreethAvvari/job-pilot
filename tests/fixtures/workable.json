@@ -1,0 +1,21 @@
+{
+  "jobs": [
+    {
+      "title": "Data Engineer",
+      "city": "Berlin",
+      "country": "Germany",
+      "workplace": "remote",
+      "url": "https://apply.workable.com/acme/j/ABC123",
+      "published_on": "2026-06-08",
+      "description": "<p>Pipelines.</p>"
+    },
+    {
+      "title": "Office Admin",
+      "city": "Berlin",
+      "country": "Germany",
+      "url": "https://apply.workable.com/acme/j/DEF456",
+      "published_on": "2026-06-08",
+      "description": "x"
+    }
+  ]
+}

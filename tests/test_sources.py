@@ -16,6 +16,7 @@ from jobpilot.sources import (
     lever,
     remoteok,
     smartrecruiters,
+    workable,
     workday,
 )
 
@@ -205,6 +206,16 @@ def test_smartrecruiters(httpx_mock):
     assert len(out) == 1  # Sales Lead filtered, no detail call for it
     assert "Do ML." in out[0].description and "Python" in out[0].description
     assert out[0].company == "Acme Corp"
+
+
+def test_workable(httpx_mock):
+    httpx_mock.add_response(url=re.compile(r".*workable.*"), json=load("workable"))
+    cfg = make_cfg(workable={"companies": ["acme"]})
+    out = workable.fetch(cfg.sources["workable"], cfg, httpx.Client())
+    _assert_valid(out, "workable")
+    assert len(out) == 1
+    assert out[0].remote is True
+    assert out[0].description == "Pipelines."
 
 
 def test_greenhouse_per_company_cap(httpx_mock):
