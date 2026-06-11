@@ -80,3 +80,15 @@ Format: **Symptom → Root cause → Fix → Guard now in place.**
 - `✓` in print() crashes under cp1252 → ASCII-only script output.
 - gcloud on Windows prompts interactively mid-script (API enablement) → pre-enable `cloudresourcemanager.googleapis.com`; never rely on prompts in automation.
 - Native-command stderr + `2>&1` in PS 5.1 wraps lines in error records → don't redirect; stderr is captured anyway.
+
+### BL-16 · Resumes page rendered placeholder cards despite correct env vars
+- **Symptom:** RESUMES_JSON verified present on the Cloud Run service, page still showed "Set RESUMES_JSON…".
+- **Root cause:** the page had no dynamic marker, so Next.js statically prerendered it at build time — baking in the env-less placeholder state.
+- **Fix:** `export const dynamic = "force-dynamic"` on every env- or data-driven page.
+- **Guard:** check the build output table — data pages must show `ƒ (Dynamic)`, never `○ (Static)`.
+
+### BL-17 · The first ATS checker was a golden retriever (fake 100s)
+- **Symptom:** in-house checker scored resumes 100/100; ResumeWorded scored the same file 73.
+- **Root cause:** keyword-coverage-only scoring measures none of what real graders weight: quantified bullets, 2-line brevity, weak verbs, buzzwords, soft-skill evidence.
+- **Fix:** researched the actual rubric (published checks + documented score reports) and rebuilt `src/jobpilot/judge.py` as a weighted replica (impact 35 / brevity 20 / style 15 / sections 15 / soft skills 15). Calibration: new judge scored the old resumes 76-86 vs the real 73.
+- **Guard:** never trust a self-built scorer without an external ground-truth comparison; keep feeding real grader reports back in as rules.

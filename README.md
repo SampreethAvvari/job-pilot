@@ -54,7 +54,8 @@ It never sends anything on its own. You stay the pilot; it does the paperwork.
 | Pipeline | **Python 3.12**, `httpx`, `pydantic` | Plug-in sources behind one `Posting` model; every LLM response validated against a schema with retry |
 | LLM | **Vertex AI Gemini Flash** | No API key (service-account auth), structured output, pennies per run; falls back to AI Studio key |
 | Database | **Google Sheets** | The DB *is* the dashboard — filters, audit trail, manual overrides for free; at job-hunt scale a real DB is overkill |
-| Resume engine | **LaTeX + pdflatex + `cmap`** | The only reliably ATS-parseable PDF text layer we found (XeTeX output splits words like "New Y ork" in parsers); a gate script enforces exactly-one-page + keyword coverage |
+| Resume engine | **LaTeX + pdflatex + `cmap`** | The only reliably ATS-parseable PDF text layer we found (XeTeX output splits words like "New Y ork" in parsers) |
+| Resume judge | **Calibrated ResumeWorded-replica** (`src/jobpilot/judge.py`) | ~40 deterministic checks weighted impact 35 / brevity 20 / style 15 / sections 15 / soft-skills 15; every resume (master or tailored) goes through a judge-guided rewrite loop — up to 10 attempts, best wins, improvements only — and ships with its full ATS report in the console |
 | Console | **Next.js 16** (App Router) on Cloud Run + **IAP** | Zero-auth-code private app: Google sign-in and allowlisting handled entirely by infrastructure |
 | Identity | **User OAuth refresh token** in Secret Manager | The pipeline acts as *you* — your Sheet, your Gmail drafts, your Drive — with four narrow scopes (see FORK-SETUP) |
 | Personal data | **Env/Secret-Manager overrides** | Profile and resumes load from `JOBPILOT_PROFILE_YAML` / `RESUME_TEX_*` env; the repo ships Jane Doe templates only |
