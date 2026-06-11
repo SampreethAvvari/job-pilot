@@ -4,7 +4,7 @@ FROM python:3.12-slim
 # texlive-extra-utils ships latexdiff for the highlighted baseline-vs-tailored diff PDF
 RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-base texlive-latex-recommended texlive-latex-extra \
-    texlive-fonts-recommended texlive-extra-utils && \
+    texlive-fonts-recommended texlive-extra-utils texlive-plain-generic && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

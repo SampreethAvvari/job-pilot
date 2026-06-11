@@ -198,10 +198,12 @@ def latexdiff_pdf(baseline_tex: str, tailored_tex: str, jobname: str) -> bytes |
                 capture_output=True, text=True, timeout=60,
             )
             if res.returncode != 0 or not res.stdout.strip():
+                print(f"latexdiff: exited {res.returncode}: {res.stderr[:300]}")
                 return None
             pdf, _pages = compile_pdf(res.stdout, jobname)
             return pdf
-    except Exception:  # noqa: BLE001 — strictly best-effort
+    except Exception as exc:  # noqa: BLE001 — strictly best-effort, but say why (BL-18)
+        print(f"latexdiff: degraded ({type(exc).__name__}: {str(exc)[:300]})")
         return None
 
 
