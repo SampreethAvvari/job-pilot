@@ -203,14 +203,17 @@ def process(
         if not 0 <= f.message_index < len(messages):
             continue
         m = messages[f.message_index]
-        if f.classification == "next_step" and is_verification(m):
+        verification = is_verification(m)
+        if f.classification == "next_step" and verification:
             f = f.model_copy(update={"classification": "automated_ack", "is_interview": False})
         alerted = ""
         if f.classification == "next_step":
             alerts.append(build_alert(account, m, f))
             alerted = "yes"
         row = tracked_by_id.get(f.job_id) if f.job_id else None
-        if row is not None and f.classification != "unrelated":
+        # verification/OTP mail is not a reply: log it, but never stamp the job row
+        # (Last reply / Reply class is what surfaces a job in the Replies tab)
+        if row is not None and f.classification != "unrelated" and not verification:
             updates.append((row["_row"], "Last reply", now.strftime("%Y-%m-%d")))
             updates.append((row["_row"], "Reply class", f.classification))
             new_status = forward_only(row["Status"], status_for(f))

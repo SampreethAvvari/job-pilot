@@ -190,6 +190,16 @@ def test_process_verification_email_never_alerts():
     assert log_rows[0][5] == "automated_ack" and log_rows[0][7] == ""
 
 
+def test_process_verification_email_never_touches_job_row():
+    # even downgraded to automated_ack, an OTP email is not a reply: it must not
+    # stamp Last reply / Reply class on the job (that's what fills the Replies tab)
+    llm_says = [Finding(message_index=0, classification="next_step",
+                        company="Ford Motor", reason="asks to confirm identity",
+                        job_id="abc")]
+    _, updates, _ = process("me@gmail.com", [OTP_MSG], llm_says, BY_ID, NOW)
+    assert updates == []
+
+
 def test_prompt_forbids_verification_as_next_step():
     assert "passcode" in iw.PROMPT and "NEVER next_step" in iw.PROMPT
 
