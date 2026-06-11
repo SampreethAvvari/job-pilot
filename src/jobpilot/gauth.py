@@ -20,6 +20,8 @@ SCOPES = [
 ]
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 LOCAL_TOKEN = Path("token.json")
+READONLY_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+LOCAL_INBOX_TOKENS = Path("inbox_tokens.json")
 
 
 def credentials() -> Credentials:
@@ -42,3 +44,32 @@ def credentials() -> Credentials:
         "No Google credentials: set GOOGLE_OAUTH_CLIENT_JSON + GOOGLE_OAUTH_REFRESH_TOKEN "
         "or run scripts/google_oauth_setup.py to create token.json"
     )
+
+
+def inbox_credentials() -> dict[str, Credentials]:
+    """Extra watched inboxes as {email: gmail.readonly creds}; {} when unconfigured.
+
+    Tokens: JOBPILOT_INBOX_TOKENS env (Secret Manager) or local inbox_tokens.json,
+    JSON of {email: refresh_token}. These accounts never get compose/Sheets/Drive.
+    """
+    raw = os.environ.get("JOBPILOT_INBOX_TOKENS")
+    if not raw and LOCAL_INBOX_TOKENS.exists():
+        raw = LOCAL_INBOX_TOKENS.read_text(encoding="utf-8")
+    if not raw:
+        return {}
+    client_json = os.environ.get("GOOGLE_OAUTH_CLIENT_JSON")
+    if not client_json:
+        client_json = Path("client_secret.json").read_text(encoding="utf-8")
+    client = json.loads(client_json)
+    client = client.get("installed") or client.get("web") or client
+    return {
+        email: Credentials(
+            token=None,
+            refresh_token=refresh,
+            client_id=client["client_id"],
+            client_secret=client["client_secret"],
+            token_uri=TOKEN_URI,
+            scopes=READONLY_SCOPES,
+        )
+        for email, refresh in json.loads(raw).items()
+    }

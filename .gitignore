@@ -7,6 +7,7 @@ __pycache__/
 .env
 credentials*.json
 token*.json
+inbox_tokens.json
 client_secret*.json
 digest_preview.html
 
