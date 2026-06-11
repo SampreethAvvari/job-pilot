@@ -60,3 +60,8 @@ def test_env_override_wins(tmp_path, monkeypatch):
     monkeypatch.setenv("JOBPILOT_PROFILE_YAML", VALID)
     cfg = Config.load(tmp_path / "does-not-exist.yaml")
     assert cfg.profile.name == "Jane Doe"
+
+
+def test_caps_per_company_default(tmp_path):
+    cfg = Config.load(_write(tmp_path, VALID))
+    assert cfg.caps.per_company == 25

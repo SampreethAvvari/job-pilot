@@ -53,6 +53,7 @@ class Masters(_Strict):
 class Caps(_Strict):
     shortlist: int = 25
     per_source: int = 100
+    per_company: int = 25  # max matched jobs per company per run (board sources)
     freshness_days: int = 7  # drop postings older than this (unknown dates kept)
 
 
