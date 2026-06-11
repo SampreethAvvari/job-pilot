@@ -6,18 +6,16 @@ import httpx
 
 from jobpilot.config import Config, SourceCfg
 from jobpilot.models import Posting
-from jobpilot.sources.common import parse_dt, strip_html, title_matches
+from jobpilot.sources.common import fetch_many, parse_dt, strip_html, title_matches
 
 BASE = "https://api.ashbyhq.com/posting-api/job-board/{slug}"
 
 
 def fetch(sc: SourceCfg, cfg: Config, client: httpx.Client) -> list[Posting]:
-    out: list[Posting] = []
-    for slug in sc.companies:
+    def one(slug: str) -> list[Posting]:
         resp = client.get(BASE.format(slug=slug))
-        if resp.status_code == 404:
-            continue
         resp.raise_for_status()
+        out: list[Posting] = []
         for job in resp.json().get("jobs", []):
             title = job.get("title", "")
             if not title_matches(title, cfg.queries):
@@ -34,4 +32,6 @@ def fetch(sc: SourceCfg, cfg: Config, client: httpx.Client) -> list[Posting]:
                     description=strip_html(job.get("descriptionHtml", "")),
                 )
             )
-    return out[: cfg.caps.per_source]
+        return out
+
+    return fetch_many("ashby", sc.companies, one, cfg.caps.per_company)

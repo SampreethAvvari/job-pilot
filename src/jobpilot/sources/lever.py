@@ -6,18 +6,16 @@ import httpx
 
 from jobpilot.config import Config, SourceCfg
 from jobpilot.models import Posting
-from jobpilot.sources.common import parse_dt, title_matches
+from jobpilot.sources.common import fetch_many, parse_dt, title_matches
 
 BASE = "https://api.lever.co/v0/postings/{slug}"
 
 
 def fetch(sc: SourceCfg, cfg: Config, client: httpx.Client) -> list[Posting]:
-    out: list[Posting] = []
-    for slug in sc.companies:
+    def one(slug: str) -> list[Posting]:
         resp = client.get(BASE.format(slug=slug), params={"mode": "json"})
-        if resp.status_code == 404:
-            continue
         resp.raise_for_status()
+        out: list[Posting] = []
         for job in resp.json():
             title = job.get("text", "")
             if not title_matches(title, cfg.queries):
@@ -36,4 +34,6 @@ def fetch(sc: SourceCfg, cfg: Config, client: httpx.Client) -> list[Posting]:
                     description=job.get("descriptionPlain", ""),
                 )
             )
-    return out[: cfg.caps.per_source]
+        return out
+
+    return fetch_many("lever", sc.companies, one, cfg.caps.per_company)

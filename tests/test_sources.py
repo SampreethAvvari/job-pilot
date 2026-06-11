@@ -161,6 +161,26 @@ def test_apify(httpx_mock, monkeypatch):
     assert out[0].description == "desc"
 
 
+def test_greenhouse_per_company_cap(httpx_mock):
+    jobs = {
+        "jobs": [
+            {
+                "title": f"Software Engineer {i}",
+                "absolute_url": f"https://boards.greenhouse.io/stripe/jobs/{i}",
+                "location": {"name": "NYC"},
+                "first_published": "2026-06-09T12:00:00Z",
+                "content": "desc",
+            }
+            for i in range(5)
+        ]
+    }
+    httpx_mock.add_response(url=re.compile(r".*greenhouse.*"), json=jobs)
+    cfg = make_cfg()
+    cfg.caps.per_company = 2
+    out = greenhouse.fetch(cfg.sources["greenhouse"], cfg, httpx.Client())
+    assert len(out) == 2
+
+
 def test_fetch_many_isolates_errors_caps_and_records_stats(httpx_mock):
     from jobpilot.models import Posting
     from jobpilot.sources import common

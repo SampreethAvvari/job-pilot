@@ -6,18 +6,16 @@ import httpx
 
 from jobpilot.config import Config, SourceCfg
 from jobpilot.models import Posting
-from jobpilot.sources.common import parse_dt, strip_html, title_matches
+from jobpilot.sources.common import fetch_many, parse_dt, strip_html, title_matches
 
 BASE = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
 
 
 def fetch(sc: SourceCfg, cfg: Config, client: httpx.Client) -> list[Posting]:
-    out: list[Posting] = []
-    for slug in sc.companies:
+    def one(slug: str) -> list[Posting]:
         resp = client.get(BASE.format(slug=slug), params={"content": "true"})
-        if resp.status_code == 404:
-            continue  # board slug gone/renamed; skip quietly
         resp.raise_for_status()
+        out: list[Posting] = []
         for job in resp.json().get("jobs", []):
             title = job.get("title", "")
             if not title_matches(title, cfg.queries):
@@ -33,4 +31,6 @@ def fetch(sc: SourceCfg, cfg: Config, client: httpx.Client) -> list[Posting]:
                     description=strip_html(job.get("content", "")),
                 )
             )
-    return out[: cfg.caps.per_source]
+        return out
+
+    return fetch_many("greenhouse", sc.companies, one, cfg.caps.per_company)
