@@ -95,3 +95,8 @@ sheet:
 
 digest:
   to: you@example.com
+
+inbox_watch:         # hourly multi-inbox reply detection + alerts
+  enabled: true
+  lookback_days: 2   # how far back each check looks
+  max_messages: 50   # per inbox per check

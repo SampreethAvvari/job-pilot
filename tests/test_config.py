@@ -49,6 +49,13 @@ def test_repo_profile_template_is_valid():
     assert cfg.sources["apify_linkedin"].actor_id
 
 
+def test_inbox_watch_defaults(tmp_path):
+    cfg = Config.load(_write(tmp_path, VALID))
+    assert cfg.inbox_watch.enabled is True
+    assert cfg.inbox_watch.lookback_days == 2
+    assert cfg.inbox_watch.max_messages == 50
+
+
 def test_env_override_wins(tmp_path, monkeypatch):
     monkeypatch.setenv("JOBPILOT_PROFILE_YAML", VALID)
     cfg = Config.load(tmp_path / "does-not-exist.yaml")

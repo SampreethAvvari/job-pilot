@@ -64,6 +64,14 @@ class DigestCfg(_Strict):
     to: str
 
 
+class InboxWatchCfg(_Strict):
+    """Multi-account reply detection (docs/superpowers/specs/2026-06-10-inbox-watch-design.md)."""
+
+    enabled: bool = True
+    lookback_days: int = 2
+    max_messages: int = 50
+
+
 DEFAULT_EXCLUDES = [
     "manager", "director", "principal", "staff", "distinguished", "vp",
     "intern", "internship", "phd",
@@ -103,6 +111,7 @@ class Config(_Strict):
     caps: Caps = Caps()
     sheet: SheetCfg = SheetCfg()
     digest: DigestCfg
+    inbox_watch: InboxWatchCfg = InboxWatchCfg()
 
     @classmethod
     def load(cls, path: str | Path) -> "Config":
