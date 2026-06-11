@@ -169,3 +169,75 @@ def classify(messages: list[dict], tracked: list[dict],
         return FindingBatch.model_validate_json(llm(prompt)).findings
     except Exception:
         return []
+
+
+def process(
+    account: str, messages: list[dict], findings: list[Finding],
+    tracked_by_id: dict[str, dict], now: datetime,
+) -> tuple[list[list], list[tuple[int, str, str]], list[tuple[str, str]]]:
+    """Pure: findings -> (InboxWatch log rows, Jobs-sheet updates, alert (subject, body)s).
+
+    Only judged messages are logged — anything the LLM skipped is retried next run.
+    """
+    log_rows: list[list] = []
+    updates: list[tuple[int, str, str]] = []
+    alerts: list[tuple[str, str]] = []
+    for f in findings:
+        if not 0 <= f.message_index < len(messages):
+            continue
+        m = messages[f.message_index]
+        alerted = ""
+        if f.classification == "next_step":
+            alerts.append(build_alert(account, m, f))
+            alerted = "yes"
+        row = tracked_by_id.get(f.job_id) if f.job_id else None
+        if row is not None and f.classification != "unrelated":
+            updates.append((row["_row"], "Last reply", now.strftime("%Y-%m-%d")))
+            updates.append((row["_row"], "Reply class", f.classification))
+            new_status = forward_only(row["Status"], status_for(f))
+            if new_status:
+                updates.append((row["_row"], "Status", new_status))
+        log_rows.append([
+            now.strftime("%Y-%m-%d %H:%M"), f"{account}:{m['id']}", account,
+            m["from"], m["subject"], f.classification, f.company, alerted,
+        ])
+    return log_rows, updates, alerts
+
+
+def watch(primary_creds, inbox_creds: dict, spreadsheet_id: str, cfg: Config,
+          llm: Callable[[str], str], now: datetime) -> list[str]:
+    """Check every watched inbox; returns digest notes. Never raises."""
+    if not cfg.inbox_watch.enabled:
+        return []
+    try:
+        primary_email = (
+            build("gmail", "v1", credentials=primary_creds, cache_discovery=False)
+            .users().getProfile(userId="me").execute()["emailAddress"]
+        )
+        accounts = {primary_email: primary_creds, **inbox_creds}
+        seen = sheets.inboxwatch_keys(primary_creds, spreadsheet_id)
+        rows = sheets.read_rows(primary_creds, spreadsheet_id)
+        tracked = [r for r in rows if r["Status"] in TRACKED_STATUSES]
+        by_id = {r["Job ID"]: r for r in tracked}
+    except Exception as exc:  # noqa: BLE001 — watcher must never break the run
+        return [f"inbox-watch: FAILED to start ({type(exc).__name__}: {exc})"]
+
+    notes = []
+    for account, creds in accounts.items():
+        try:
+            messages = fetch_messages(
+                creds, cfg.inbox_watch.lookback_days, cfg.inbox_watch.max_messages
+            )
+            fresh = [m for m in messages if f"{account}:{m['id']}" not in seen]
+            findings = classify(fresh, tracked, llm)
+            log_rows, updates, alerts = process(account, fresh, findings, by_id, now)
+            for subject, body in alerts:
+                send_alert(primary_creds, cfg.digest.to, subject, body)
+            sheets.update_cells(primary_creds, spreadsheet_id, updates)
+            sheets.append_inboxwatch_rows(primary_creds, spreadsheet_id, log_rows)
+            notes.append(
+                f"inbox-watch {account}: {len(fresh)} new emails, {len(alerts)} alerts"
+            )
+        except Exception as exc:  # noqa: BLE001 — one dark inbox must not kill the others
+            notes.append(f"inbox-watch {account}: FAILED ({type(exc).__name__}: {exc})")
+    return notes

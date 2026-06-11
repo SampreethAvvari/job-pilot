@@ -1,14 +1,21 @@
 import base64
 import json
+from datetime import datetime, timezone
 
+import jobpilot.inboxwatch as iw
 from jobpilot.inboxwatch import (
     Finding,
     body_text,
     build_alert,
     classify,
     forward_only,
+    process,
     status_for,
+    watch,
 )
+from tests.test_sources import make_cfg
+
+NOW = datetime(2026, 6, 10, 15, 0, tzinfo=timezone.utc)
 
 MESSAGES = [
     {"id": "m1", "from": "recruiter@acme.com", "subject": "Interview availability",
@@ -114,3 +121,104 @@ def test_status_for_mapping():
     assert status_for(Finding(message_index=0, classification="next_step")) == "Response"
     assert status_for(Finding(message_index=0, classification="automated_ack")) is None
     assert status_for(Finding(message_index=0, classification="unrelated")) is None
+
+
+BY_ID = {"abc": {"_row": 2, "Job ID": "abc", "Company": "Acme",
+                 "Title": "ML Engineer", "Status": "Applied"}}
+
+
+def findings_pair():
+    return [
+        Finding(message_index=0, classification="next_step", is_interview=True,
+                company="Acme", reason="availability", job_id="abc"),
+        Finding(message_index=1, classification="automated_ack", company="Beta"),
+    ]
+
+
+def test_process_alerts_updates_and_logs():
+    log_rows, updates, alerts = process("me@gmail.com", MESSAGES, findings_pair(), BY_ID, NOW)
+    assert len(alerts) == 1 and "Acme" in alerts[0][0]
+    assert (2, "Status", "Interview") in updates
+    assert (2, "Reply class", "next_step") in updates
+    assert len(log_rows) == 2
+    assert log_rows[0][1] == "me@gmail.com:m1" and log_rows[0][7] == "yes"
+    assert log_rows[1][5] == "automated_ack" and log_rows[1][7] == ""
+
+
+def test_process_unjudged_messages_not_logged():
+    # LLM omitted message 1 → no log row, so it is re-judged next run
+    only_first = [findings_pair()[0]]
+    log_rows, _, _ = process("me@gmail.com", MESSAGES, only_first, BY_ID, NOW)
+    assert len(log_rows) == 1
+
+
+def test_process_rejection_updates_status_without_alert():
+    rej = [Finding(message_index=1, classification="rejection", company="Acme", job_id="abc")]
+    log_rows, updates, alerts = process("me@gmail.com", MESSAGES, rej, BY_ID, NOW)
+    assert alerts == []  # rejections never alert...
+    assert (2, "Status", "Rejected") in updates  # ...but the sheet still moves
+    assert log_rows[0][5] == "rejection"
+
+
+def test_process_out_of_range_index_ignored():
+    bogus = [Finding(message_index=9, classification="next_step")]
+    log_rows, updates, alerts = process("me@gmail.com", MESSAGES, bogus, BY_ID, NOW)
+    assert log_rows == [] and updates == [] and alerts == []
+
+
+class _FakeGmail:
+    def users(self):
+        return self
+
+    def getProfile(self, userId):
+        return self
+
+    def execute(self):
+        return {"emailAddress": "primary@nyu.edu"}
+
+
+def test_watch_isolates_account_failures(monkeypatch):
+    monkeypatch.setattr(iw, "build", lambda *a, **k: _FakeGmail())
+    monkeypatch.setattr(iw.sheets, "inboxwatch_keys", lambda c, s: set())
+    monkeypatch.setattr(iw.sheets, "read_rows", lambda c, s: [])
+    monkeypatch.setattr(iw.sheets, "update_cells", lambda c, s, u: None)
+    monkeypatch.setattr(iw.sheets, "append_inboxwatch_rows", lambda c, s, r: None)
+
+    def boom(creds, lookback_days, max_messages):
+        raise RuntimeError("token expired")
+
+    monkeypatch.setattr(iw, "fetch_messages", boom)
+    notes = watch("creds", {"extra@gmail.com": "c2"}, "sid", make_cfg(), None, NOW)
+    assert len(notes) == 2 and all("FAILED" in n for n in notes)
+
+
+def test_watch_dedups_seen_messages_and_alerts(monkeypatch):
+    sent = []
+    appended = []
+    monkeypatch.setattr(iw, "build", lambda *a, **k: _FakeGmail())
+    monkeypatch.setattr(iw.sheets, "inboxwatch_keys",
+                        lambda c, s: {"primary@nyu.edu:m2"})
+    monkeypatch.setattr(iw.sheets, "read_rows", lambda c, s: list(BY_ID.values()))
+    monkeypatch.setattr(iw.sheets, "update_cells", lambda c, s, u: None)
+    monkeypatch.setattr(iw.sheets, "append_inboxwatch_rows",
+                        lambda c, s, r: appended.extend(r))
+    monkeypatch.setattr(iw, "fetch_messages", lambda c, d, m: list(MESSAGES))
+    monkeypatch.setattr(iw, "send_alert", lambda c, to, s, b: sent.append(s))
+
+    def llm(prompt):
+        # m2 was already judged → only m1 survives dedup, at index 0
+        assert "Thanks for applying to Beta." not in prompt
+        return json.dumps({"findings": [
+            {"message_index": 0, "classification": "next_step", "is_interview": True,
+             "company": "Acme", "reason": "availability", "job_id": "abc"}]})
+
+    notes = watch("creds", {}, "sid", make_cfg(), llm, NOW)
+    assert sent == ["🎯 Acme responded — check primary@nyu.edu"]
+    assert len(appended) == 1
+    assert notes == ["inbox-watch primary@nyu.edu: 1 new emails, 1 alerts"]
+
+
+def test_watch_disabled_returns_empty():
+    cfg = make_cfg()
+    cfg.inbox_watch.enabled = False
+    assert watch("creds", {}, "sid", cfg, None, NOW) == []
