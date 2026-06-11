@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { companySize, SIZE_BUCKETS } from "@/lib/company-size";
 import { isApplied } from "@/lib/status-sets";
 import type { Job } from "@/lib/types";
 import { ROLES, STATUSES } from "@/lib/types";
@@ -34,6 +35,7 @@ export function JobsTable({
   const [status, setStatus] = useState(mode === "open" ? "New" : "all");
   const [source, setSource] = useState("all");
   const [role, setRole] = useState("all");
+  const [size, setSize] = useState("all");
   const [minFit, setMinFit] = useState(0);
   const [postedWithin, setPostedWithin] = useState(0); // hours; 0 = any
   const [sortBy, setSortBy] = useState<"found" | "posted" | "fit">(
@@ -115,6 +117,7 @@ export function JobsTable({
       })
       .filter((j) => source === "all" || j.source === source)
       .filter((j) => role === "all" || (j.role || j.resumeVariant) === role)
+      .filter((j) => size === "all" || companySize(j.company) === size)
       .filter((j) => (j.fit ?? -1) >= minFit)
       .filter((j) => {
         if (!postedWithin) return true;
@@ -137,7 +140,7 @@ export function JobsTable({
           a.dateFound + String(a.fit ?? -1).padStart(3, "0"),
         );
       });
-  }, [jobs, status, source, role, minFit, postedWithin, sortBy, q, mode]);
+  }, [jobs, status, source, role, size, minFit, postedWithin, sortBy, q, mode]);
 
   function mutate(row: number, patch: Partial<Job>, updates: Record<string, string>) {
     const prev = jobs;
@@ -196,6 +199,12 @@ export function JobsTable({
                 value={role} onChange={(e) => setRole(e.target.value)}>
           <option value="all">role: all</option>
           {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <select className="panel cell-select px-2 py-1.5 text-xs"
+                title="Company size (best-effort, by company name)"
+                value={size} onChange={(e) => setSize(e.target.value)}>
+          <option value="all">size: all</option>
+          {SIZE_BUCKETS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <select className="panel cell-select px-2 py-1.5 text-xs"
                 value={minFit} onChange={(e) => setMinFit(Number(e.target.value))}>
@@ -262,7 +271,14 @@ export function JobsTable({
                     </div>
                   )}
                 </td>
-                <td className="whitespace-nowrap">{j.company}</td>
+                <td className="whitespace-nowrap">
+                  {j.company}
+                  {companySize(j.company) !== "Unknown" && (
+                    <div className="text-[10px]" style={{ color: "var(--text-faint)" }}>
+                      {companySize(j.company).toLowerCase()}
+                    </div>
+                  )}
+                </td>
                 <td className="max-w-40 truncate" title={j.location}>{j.location}</td>
                 <td className="whitespace-nowrap" style={{ color: "var(--text-dim)" }}>
                   {j.postedAge}
