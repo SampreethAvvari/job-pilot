@@ -14,6 +14,8 @@ def main() -> None:
     parser.add_argument("--sources", default="", help="comma-separated subset of sources")
     parser.add_argument("--config", default="profile.yaml")
     parser.add_argument("--tailor-job", default="", help="tailor a single job by Job ID")
+    parser.add_argument("--explain-job", default="",
+                        help="rebuild the tailoring transparency report for one Job ID")
     parser.add_argument("--outreach-job", default="", help="draft outreach for one Job ID")
     parser.add_argument("--fast", action="store_true",
                         help="fetch+score+record only (console refresh)")
@@ -55,7 +57,7 @@ def main() -> None:
                              make_tailor_llm(cfg), datetime.now(timezone.utc)))
         return
 
-    if args.tailor_job or args.outreach_job:
+    if args.tailor_job or args.outreach_job or args.explain_job:
         import os
         from datetime import datetime, timezone
 
@@ -68,7 +70,7 @@ def main() -> None:
 
         creds = credentials()
         sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
-        job_id = args.tailor_job or args.outreach_job
+        job_id = args.tailor_job or args.outreach_job or args.explain_job
         rows = sheets.read_rows(creds, sid)
         row = next((r for r in rows if r["Job ID"] == job_id), None)
         if row is None:
@@ -76,6 +78,11 @@ def main() -> None:
         llm = make_tailor_llm(cfg)
         if args.tailor_job:
             print(tailor_row(creds, sid, row, cfg, llm, datetime.now(timezone.utc)))
+        elif args.explain_job:
+            from jobpilot.explain import explain_job_row
+
+            print(explain_job_row(creds, sid, row, cfg, llm,
+                                  datetime.now(timezone.utc)))
         else:
             print(outreach_row(creds, sid, row, cfg, llm, httpx.Client(timeout=30)))
         return

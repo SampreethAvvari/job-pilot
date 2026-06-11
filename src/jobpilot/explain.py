@@ -205,6 +205,27 @@ def latexdiff_pdf(baseline_tex: str, tailored_tex: str, jobname: str) -> bytes |
         return None
 
 
+def _pdf_text(pdf_bytes: bytes) -> str:
+    import io
+
+    from pypdf import PdfReader
+
+    return " ".join(pg.extract_text() or "" for pg in PdfReader(io.BytesIO(pdf_bytes)).pages)
+
+
+def _drive_pdf_text(creds, url: str) -> str:
+    """Text of a Drive PDF given its /file/d/<id>/view URL."""
+    import re
+
+    from googleapiclient.discovery import build as gbuild
+
+    m = re.search(r"/d/([\w-]+)", url)
+    if not m:
+        raise ValueError("no Drive file id in tailored resume URL")
+    drive = gbuild("drive", "v3", credentials=creds, cache_discovery=False)
+    return _pdf_text(drive.files().get_media(fileId=m.group(1)).execute())
+
+
 def explain_job_row(creds, spreadsheet_id: str, row: dict, cfg,
                     llm: Callable[[str], str], now) -> str:
     """Legacy backfill: reconstruct a report from the stored PDFs (--explain-job).
@@ -212,30 +233,15 @@ def explain_job_row(creds, spreadsheet_id: str, row: dict, cfg,
     Pre-feature rows never saved their tailored tex, so precision is 'pdf':
     text extracted from the Drive PDF vs the compiled baseline master.
     """
-    import io
-    import re
-
-    from googleapiclient.discovery import build as gbuild
-    from pypdf import PdfReader
-
     from jobpilot import sheets
     from jobpilot.tailor import _resume_tex
 
-    company, title = row["Company"], row["Title"]
+    company, title = row.get("Company", "?"), row.get("Title", "?")
     try:
-        m = re.search(r"/d/([\w-]+)", row.get("Tailored resume", ""))
-        if not m:
-            return f"explain FAILED for {company}: no tailored resume URL"
-        drive = gbuild("drive", "v3", credentials=creds, cache_discovery=False)
-        blob = drive.files().get_media(fileId=m.group(1)).execute()
-        tailored_text = " ".join(
-            pg.extract_text() or "" for pg in PdfReader(io.BytesIO(blob)).pages)
-
+        tailored_text = _drive_pdf_text(creds, row.get("Tailored resume", ""))
         variant = row.get("Resume variant") or "FDE"
-        base_tex = _resume_tex(variant)
-        base_pdf, _ = compile_pdf(base_tex, f"{variant}_baseline")
-        baseline_text = " ".join(
-            pg.extract_text() or "" for pg in PdfReader(io.BytesIO(base_pdf)).pages)
+        base_pdf, _ = compile_pdf(_resume_tex(variant), f"{variant}_baseline")
+        baseline_text = _pdf_text(base_pdf)
 
         keywords = [k.strip() for k in (row.get("JD keywords") or "").split(",") if k.strip()]
         prompt = build_explain_prompt(

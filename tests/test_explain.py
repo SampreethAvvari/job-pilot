@@ -99,3 +99,41 @@ def test_latexdiff_pdf_compiles_marked_tex(monkeypatch):
     monkeypatch.setattr(explain.subprocess, "run", lambda *a, **k: R())
     monkeypatch.setattr(explain, "compile_pdf", lambda tex, name: (b"%PDF", 1))
     assert latexdiff_pdf(BASE_TEX, TAILORED_TEX, "j") == b"%PDF"
+
+
+def test_explain_job_row_reconstructs_from_pdfs(monkeypatch):
+    from datetime import datetime, timezone
+
+    import jobpilot.sheets as sh
+
+    reports = []
+    monkeypatch.setattr(sh, "append_report",
+                        lambda c, s, kind, key, score, js, ts: reports.append((kind, key, js)))
+    monkeypatch.setattr(explain, "compile_pdf", lambda tex, name: (b"%PDF", 1))
+    monkeypatch.setattr(explain, "_drive_pdf_text", lambda creds, url: "tailored Kafka text")
+    monkeypatch.setattr(explain, "_pdf_text", lambda b: "baseline text")
+    monkeypatch.setattr(explain, "generate_report",
+                        lambda p, llm: TransparencyReport(resume_rationale="legacy"))
+
+    row = {"_row": 5, "Company": "Acme", "Title": "MLE", "Job ID": "abc",
+           "Resume variant": "MLE", "JD excerpt": "desc", "URL": "https://x",
+           "JD keywords": "Kafka, Airflow", "Resume ATS": "88",
+           "Tailored resume": "https://drive.google.com/file/d/FILE123/view"}
+    note = explain.explain_job_row("creds", "sid", row, None, lambda p: "{}",
+                                   datetime(2026, 6, 11, tzinfo=timezone.utc))
+    assert note.startswith("explained:")
+    kind, key, js = reports[0]
+    assert (kind, key) == ("tailor", "abc")
+    parsed = json.loads(js)
+    assert parsed["precision"] == "pdf"
+    assert parsed["ats"]["score"] == 88.0
+
+
+def test_explain_job_row_requires_tailored_url():
+    from datetime import datetime, timezone
+
+    note = explain.explain_job_row(
+        "creds", "sid",
+        {"Company": "Acme", "Title": "MLE", "Job ID": "a", "Tailored resume": ""},
+        None, None, datetime(2026, 6, 11, tzinfo=timezone.utc))
+    assert "FAILED" in note
