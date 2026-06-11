@@ -7,6 +7,7 @@ import { companySize, SIZE_BUCKETS } from "@/lib/company-size";
 import { isApplied } from "@/lib/status-sets";
 import type { Job } from "@/lib/types";
 import { ROLES, STATUSES } from "@/lib/types";
+import { AtsBadge } from "@/components/ats-report";
 import { FitMeter } from "@/components/status";
 
 async function pushUpdate(row: number, updates: Record<string, string>) {
@@ -313,14 +314,7 @@ export function JobsTable({
                           Cover ⬇
                         </a>
                       )}
-                      {j.resumeAts && (
-                        <a href={`/api/reports?kind=job&key=${j.id}`} target="_blank"
-                           rel="noopener" className="hover:underline"
-                           title="Open the full ATS report"
-                           style={{ color: Number(j.resumeAts) >= 90 ? "var(--green)" : "var(--amber)" }}>
-                          ATS {j.resumeAts}
-                        </a>
-                      )}
+                      {j.resumeAts && <AtsBadge job={j} />}
                     </span>
                   ) : tailoring.has(j.row) ? (
                     <span className="blink text-[11px]" style={{ color: "var(--amber)" }}>

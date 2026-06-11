@@ -33,6 +33,10 @@ export async function triggerOutreach(jobId: string): Promise<void> {
   await runWithArgs(["--outreach-job", jobId]);
 }
 
+export async function triggerExplain(jobId: string): Promise<void> {
+  await runWithArgs(["--explain-job", jobId]);
+}
+
 export async function triggerRebuild(variant: string): Promise<void> {
   await runWithArgs(["--rebuild-resume", variant]);
 }
