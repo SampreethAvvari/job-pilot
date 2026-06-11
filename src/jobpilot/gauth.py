@@ -15,7 +15,7 @@ from google.oauth2.credentials import Credentials
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/gmail.compose",
-    "https://www.googleapis.com/auth/gmail.readonly",  # reply-scanner (UI tracking)
+    "https://www.googleapis.com/auth/gmail.readonly",  # inbox-watch (reply detection)
     "https://www.googleapis.com/auth/drive.file",
 ]
 TOKEN_URI = "https://oauth2.googleapis.com/token"

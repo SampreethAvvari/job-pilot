@@ -69,8 +69,8 @@ def to_row(s: Scored, now: datetime) -> list:
         "Rejected" if auto_reject else "New",
         "auto-rejected: sponsorship unlikely" if auto_reject else "",
         "",  # Applied date (UI)
-        "",  # Last reply (scanner)
-        "",  # Reply class (scanner)
+        "",  # Last reply (inbox-watch)
+        "",  # Reply class (inbox-watch)
         "",  # Tailored resume (tailor)
         "",  # Cover letter (tailor)
         "",  # JD keywords (tailor)

@@ -17,11 +17,29 @@ def main() -> None:
     parser.add_argument("--outreach-job", default="", help="draft outreach for one Job ID")
     parser.add_argument("--fast", action="store_true",
                         help="fetch+score+record only (console refresh)")
+    parser.add_argument("--inbox-watch", action="store_true",
+                        help="check watched inboxes for replies and alert (skips pipeline)")
     parser.add_argument("--rebuild-resume", default="",
                         help="regenerate a master resume variant through the judge loop")
     args = parser.parse_args()
 
     cfg = Config.load(args.config)
+
+    if args.inbox_watch:
+        import os
+        from datetime import datetime, timezone
+
+        from jobpilot import inboxwatch
+        from jobpilot.gauth import credentials, inbox_credentials
+        from jobpilot.scorer import make_gemini_llm
+
+        creds = credentials()
+        sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
+        llm = make_gemini_llm(cfg, schema=inboxwatch.FindingBatch)
+        for note in inboxwatch.watch(creds, inbox_credentials(), sid, cfg, llm,
+                                     datetime.now(timezone.utc)):
+            print(note)
+        return
 
     if args.rebuild_resume:
         import os

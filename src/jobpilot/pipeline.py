@@ -93,9 +93,8 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
         print(f"\n{len(scored)} jobs; digest preview -> digest_preview.html")
         return scored
 
-    from jobpilot.gauth import credentials
-
-    from jobpilot.scanner import scan
+    from jobpilot import inboxwatch
+    from jobpilot.gauth import credentials, inbox_credentials
 
     creds = credentials()
     sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
@@ -107,13 +106,18 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
     sheets.append_jobs(creds, sid, scored, now)
     n_matches = sum(1 for s in scored if (s.fit_score or 0) >= cfg.scoring.threshold)
 
+    watch_llm = make_gemini_llm(cfg, schema=inboxwatch.FindingBatch)
+    watch_notes = inboxwatch.watch(creds, inbox_credentials(), sid, cfg, watch_llm, now)
+    notes.extend(watch_notes)
+
     if fast:
-        # Console-refresh mode: rows are in the sheet; tailoring/scanner/outreach/digest
-        # are left to the next scheduled run.
+        # Console-refresh mode: rows are in the sheet; tailoring/outreach/digest are
+        # left to the next scheduled run. Inbox watch already ran (hourly alerts).
         print(f"fast run complete: {len(scored)} new jobs, {n_matches} matches, sheet {sid}")
+        for note in watch_notes:
+            print(note)
         return scored
 
-    notes.extend(scan(creds, sid, cfg, llm, now))
     from jobpilot.outreach import auto_outreach
     from jobpilot.tailor import auto_tailor, make_tailor_llm
 
