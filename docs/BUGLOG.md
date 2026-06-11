@@ -116,3 +116,9 @@ Format: **Symptom → Root cause → Fix → Guard now in place.**
 - **Root cause:** `jobpilot-hourly` fires the Cloud Run job through the v2 API **with container-arg overrides** (`--fast --sources …`), which requires `run.jobs.runWithOverrides`. The runner SA only had `roles/run.invoker` (plain `run.jobs.run`) → every attempt 403'd, silently, since creation. The daily trigger uses the v1 endpoint with no overrides, so it worked — masking the gap.
 - **Fix:** grant `roles/run.developer` (narrowest predefined role with `runWithOverrides`) to the runner SA, scoped to the `jobpilot` job; cadence bumped to every 30 min (`15,45 * * * *` ET, offset from :00 full runs). FORK-SETUP.md updated — every fork following it had the same dead trigger.
 - **Guard:** scheduler failures are invisible unless you look — `gcloud scheduler jobs list` shows `status.code` per job; code 7 = PERMISSION_DENIED. Check it after any scheduler/IAM change.
+
+### BL-22 · Every console job-trigger button silently failed (same 403 as BL-21)
+- **Symptom:** ✨Tailor / ✉Draft / Refresh appeared to start ("tailoring…") then just timed out; no execution ever appeared.
+- **Root cause:** the UI's `runWithArgs` passes container-arg overrides via the v2 API; `jobpilot-ui` only had `roles/run.invoker`, which lacks `run.jobs.runWithOverrides`. Execution history showed zero UI-created executions since the buttons switched to overrides. The route swallows the 403 into a 500 and the table polls until timeout — invisible.
+- **Fix:** `roles/run.developer` on the job for `jobpilot-ui` (same as BL-21 for the scheduler SA).
+- **Guard:** any new identity calling jobs:run WITH overrides needs run.developer, not run.invoker — check `gcloud run jobs executions list --format="value(name,metadata.annotations.'run.googleapis.com/creator')"` to see who actually manages to launch runs.
