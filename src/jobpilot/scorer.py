@@ -40,8 +40,11 @@ class Scored(BaseModel):
     role_category: str = "Other"
 
 
-def make_gemini_llm(cfg: Config) -> LlmFn:
-    """Gemini client: Vertex AI when GOOGLE_CLOUD_PROJECT is set, else AI Studio key."""
+def make_gemini_llm(cfg: Config, schema: type[BaseModel] | None = None) -> LlmFn:
+    """Gemini client: Vertex AI when GOOGLE_CLOUD_PROJECT is set, else AI Studio key.
+
+    schema constrains the JSON response; defaults to the scoring contract.
+    """
     from google import genai
 
     project = os.environ.get("GOOGLE_CLOUD_PROJECT")
@@ -60,7 +63,7 @@ def make_gemini_llm(cfg: Config) -> LlmFn:
             contents=prompt,
             config={
                 "response_mime_type": "application/json",
-                "response_schema": _ScoreBatch,
+                "response_schema": schema or _ScoreBatch,
             },
         )
         return resp.text
