@@ -110,3 +110,9 @@ Format: **Symptom → Root cause → Fix → Guard now in place.**
 - **Root cause:** the dedup key hashed company+title+**location**, and boards list one role per metro (Adzuna county-level spellings, LinkedIn per-city reposts) — every location variant hashed to a "new" job. Zero exact-id duplicates: the mechanism worked; the key was wrong.
 - **Fix:** `dedup.key()` is company+title only; in-batch collapse keeps the highest-fidelity source. `sheets.known_ids()` now **recomputes** keys from the Title+Company columns instead of reading the stored Job ID column — old rows carry location-based ids that would never match the new scheme and everything would have been re-added once.
 - **Trade-off (accepted):** genuinely distinct same-title reqs in different cities collapse to one row; for an apply-once dashboard that is the right granularity.
+
+### BL-21 · The hourly fast-fetch never ran once (jobs always hours stale)
+- **Symptom:** newest jobs in the dashboard were always 4-6h old; execution history showed only the 4x/day full runs.
+- **Root cause:** `jobpilot-hourly` fires the Cloud Run job through the v2 API **with container-arg overrides** (`--fast --sources …`), which requires `run.jobs.runWithOverrides`. The runner SA only had `roles/run.invoker` (plain `run.jobs.run`) → every attempt 403'd, silently, since creation. The daily trigger uses the v1 endpoint with no overrides, so it worked — masking the gap.
+- **Fix:** grant `roles/run.developer` (narrowest predefined role with `runWithOverrides`) to the runner SA, scoped to the `jobpilot` job; cadence bumped to every 30 min (`15,45 * * * *` ET, offset from :00 full runs). FORK-SETUP.md updated — every fork following it had the same dead trigger.
+- **Guard:** scheduler failures are invisible unless you look — `gcloud scheduler jobs list` shows `status.code` per job; code 7 = PERMISSION_DENIED. Check it after any scheduler/IAM change.

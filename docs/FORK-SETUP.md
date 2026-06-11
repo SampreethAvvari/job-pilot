@@ -16,7 +16,7 @@ every command, and every file you must personalize.
 ## What you're building
 
 ```
-Cloud Scheduler (hourly fast-fetch + 4x/day full run)
+Cloud Scheduler (30-min fast-fetch + 4x/day full run)
         │
         ▼
 Cloud Run Job "jobpilot" (Python 3.12)
@@ -179,6 +179,10 @@ gcloud beta iap web add-iam-policy-binding --project $PROJECT --resource-type=cl
 ```bash
 gcloud run jobs add-iam-policy-binding jobpilot --region $REGION --project $PROJECT \
   --member="serviceAccount:jobpilot-runner@$PROJECT.iam.gserviceaccount.com" --role=roles/run.invoker
+# run.developer too: the fast-fetch trigger passes container-arg overrides, which
+# need run.jobs.runWithOverrides — with only run.invoker every fast run 403s (BL-21)
+gcloud run jobs add-iam-policy-binding jobpilot --region $REGION --project $PROJECT \
+  --member="serviceAccount:jobpilot-runner@$PROJECT.iam.gserviceaccount.com" --role=roles/run.developer
 
 # full runs 4x/day (LinkedIn + tailoring + inbox watch + digest)
 gcloud scheduler jobs create http jobpilot-daily --location $REGION --project $PROJECT \
@@ -186,9 +190,10 @@ gcloud scheduler jobs create http jobpilot-daily --location $REGION --project $P
   --uri "https://$REGION-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$PROJECT/jobs/jobpilot:run" \
   --http-method POST --oauth-service-account-email jobpilot-runner@$PROJECT.iam.gserviceaccount.com
 
-# hourly fast fetch + inbox watch (free sources only — protects Apify credits)
+# fast fetch + inbox watch every 30 min, offset from the :00 full runs
+# (free sources only — protects Apify credits)
 gcloud scheduler jobs create http jobpilot-hourly --location $REGION --project $PROJECT \
-  --schedule "0 1-5,7-11,13-17,19-23 * * *" --time-zone "America/New_York" \
+  --schedule "15,45 * * * *" --time-zone "America/New_York" \
   --uri "https://run.googleapis.com/v2/projects/$PROJECT/locations/$REGION/jobs/jobpilot:run" \
   --http-method POST --headers "Content-Type=application/json" \
   --message-body '{"overrides":{"containerOverrides":[{"args":["--fast","--sources","greenhouse,lever,ashby,remoteok,hn_hiring,adzuna"]}]}}' \
@@ -299,7 +304,7 @@ Third-party access, or destroy the `GOOGLE_OAUTH_REFRESH_TOKEN` secret.
   on-demand ✉Draft), Apollo looks up 1–2 recruiters (skips gracefully without a
   key), Gemini writes a ≤130-word note from your real accomplishments, and it lands
   in **your Gmail drafts** with a LinkedIn people-search fallback link on the row.
-- **Inbox watch** (`inboxwatch.py`): every run (hourly + full) reads recent mail
+- **Inbox watch** (`inboxwatch.py`): every run (fast + full) reads recent mail
   from the primary inbox plus any extra accounts in `JOBPILOT_INBOX_TOKENS`, and
   judges EVERY email — not just tracked applications. A genuine next step
   (interview/phone-screen invite, scheduling or availability request, online
@@ -316,7 +321,7 @@ Third-party access, or destroy the `GOOGLE_OAUTH_REFRESH_TOKEN` secret.
   modes), Apply→confirm-on-return flow with green ticks and Applied dates,
   **Applied (n)** tab, ✕ Dismiss (hide forever, auditable), resume armory,
   replies feed, ⟳ fast refresh (fetch+score only, ~3–6 min).
-- **Schedules**: hourly fast-fetch (free sources), 4×/day full runs. Change cadence
+- **Schedules**: 30-min fast-fetch (free sources), 4×/day full runs. Change cadence
   with `gcloud scheduler jobs update`.
 
 ## Appendix C — The resume system blueprint (bring your own variants)
