@@ -1,10 +1,11 @@
 FROM python:3.12-slim
 
 # pdflatex for per-job tailored resume/cover-letter PDFs (cmap = ATS-clean text layer);
-# texlive-extra-utils ships latexdiff for the highlighted baseline-vs-tailored diff PDF
+# latexdiff (own package on trixie, NOT in texlive-extra-utils) renders the highlighted
+# baseline-vs-tailored diff PDF; texlive-plain-generic ships ulem.sty for its UNDERLINE markup
 RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-base texlive-latex-recommended texlive-latex-extra \
-    texlive-fonts-recommended texlive-extra-utils texlive-plain-generic && \
+    texlive-fonts-recommended latexdiff texlive-plain-generic && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
