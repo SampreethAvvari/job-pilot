@@ -29,13 +29,21 @@ def registry() -> dict[str, FetchFn]:
         greenhouse,
         hn_hiring,
         lever,
+        recruitee,
         remoteok,
+        smartrecruiters,
+        workable,
+        workday,
     )
 
     return {
         "greenhouse": greenhouse.fetch,
         "lever": lever.fetch,
         "ashby": ashby.fetch,
+        "workday": workday.fetch,
+        "smartrecruiters": smartrecruiters.fetch,
+        "workable": workable.fetch,
+        "recruitee": recruitee.fetch,
         "remoteok": remoteok.fetch,
         "hn_hiring": hn_hiring.fetch,
         "adzuna": adzuna.fetch,

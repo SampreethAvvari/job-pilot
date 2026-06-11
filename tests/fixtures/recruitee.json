@@ -1,0 +1,19 @@
+{
+  "offers": [
+    {
+      "title": "Software Engineer Backend",
+      "location": "Amsterdam, Netherlands",
+      "remote": true,
+      "careers_url": "https://acme.recruitee.com/o/backend-engineer",
+      "published_at": "2026-06-07T09:00:00.000Z",
+      "description": "<p>Go services.</p>"
+    },
+    {
+      "title": "Recruiter",
+      "location": "Amsterdam",
+      "careers_url": "https://acme.recruitee.com/o/recruiter",
+      "published_at": "2026-06-07T09:00:00.000Z",
+      "description": "x"
+    }
+  ]
+}

@@ -14,6 +14,7 @@ from jobpilot.sources import (
     greenhouse,
     hn_hiring,
     lever,
+    recruitee,
     remoteok,
     smartrecruiters,
     workable,
@@ -216,6 +217,15 @@ def test_workable(httpx_mock):
     assert len(out) == 1
     assert out[0].remote is True
     assert out[0].description == "Pipelines."
+
+
+def test_recruitee(httpx_mock):
+    httpx_mock.add_response(url=re.compile(r".*recruitee.*"), json=load("recruitee"))
+    cfg = make_cfg(recruitee={"companies": ["acme"]})
+    out = recruitee.fetch(cfg.sources["recruitee"], cfg, httpx.Client())
+    _assert_valid(out, "recruitee")
+    assert len(out) == 1
+    assert out[0].remote is True
 
 
 def test_greenhouse_per_company_cap(httpx_mock):

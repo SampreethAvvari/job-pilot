@@ -62,6 +62,20 @@ sources:
   ashby:
     enabled: true
     companies: [notion, linear, ramp, cursor, openai, perplexity]
+  # The four below are normally populated from the Companies sheet tab
+  # (auto-resolved by jobpilot.resolver); listing slugs here also works.
+  workday:
+    enabled: true
+    companies: []   # slug format: tenant/wdN/site, from the careers URL
+  smartrecruiters:
+    enabled: true
+    companies: []   # case-sensitive id from careers.smartrecruiters.com/{Company}
+  workable:
+    enabled: true
+    companies: []
+  recruitee:
+    enabled: true
+    companies: []
   remoteok:
     enabled: true
     max_items: 100
