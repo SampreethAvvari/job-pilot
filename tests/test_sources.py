@@ -42,11 +42,14 @@ def make_cfg(**source_overrides) -> Config:
     return Config.model_validate(
         {
             "profile": {
-                "name": "S",
+                "name": "Jane Doe Candidate",
                 "headline": "AI Engineer",
                 "sponsorship_needed": True,
                 "locations": ["NYC"],
                 "summary": "AI Engineer building production ML systems; needs sponsorship",
+                "portfolio": "https://janedoe.dev",
+                "linkedin": "https://linkedin.com/in/janedoe",
+                "github": "https://github.com/janedoe",
             },
             "queries": ["Engineer", "Data Scientist"],
             "sources": sources,

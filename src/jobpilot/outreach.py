@@ -6,7 +6,10 @@ NOTHING IS EVER SENT — drafts only. The user reviews and sends from Gmail.
 from __future__ import annotations
 
 import base64
+import re
 from datetime import datetime
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Callable
@@ -17,7 +20,7 @@ from pydantic import BaseModel
 
 from jobpilot import sheets
 from jobpilot.apollo import find_contacts, linkedin_people_search_url
-from jobpilot.config import Config
+from jobpilot.config import Config, Profile
 
 PROMPT = Path(__file__).parent / "prompts" / "outreach_v1.txt"
 MAX_PER_RUN = 10
@@ -32,9 +35,41 @@ def _gmail(creds):
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
 
-def create_gmail_draft(creds, to: str, subject: str, body: str) -> str:
-    """Create the draft; return a Gmail compose URL for the dashboard."""
-    msg = MIMEText(body)
+def signature(profile: Profile) -> str:
+    """Deterministic signature block — never left to the LLM."""
+    links = [(label, url) for label, url in (
+        ("Portfolio", profile.portfolio),
+        ("LinkedIn", profile.linkedin),
+        ("GitHub", profile.github),
+    ) if url]
+    lines = ["Best,", profile.name]
+    lines.extend(f"{label}: {url}" for label, url in links)
+    return "\n".join(lines)
+
+
+def _drive_pdf_bytes(creds, url: str) -> bytes | None:
+    """Bytes of a Drive PDF given its /file/d/<id>/view URL; None when unavailable."""
+    m = re.search(r"/d/([\w-]+)", url or "")
+    if not m:
+        return None
+    try:
+        drive = build("drive", "v3", credentials=creds, cache_discovery=False)
+        return drive.files().get_media(fileId=m.group(1)).execute()
+    except Exception:  # noqa: BLE001 — attachment is best-effort
+        return None
+
+
+def create_gmail_draft(creds, to: str, subject: str, body: str,
+                       attachment: tuple[str, bytes] | None = None) -> str:
+    """Create the draft (optionally with a PDF attached); return a Gmail URL."""
+    if attachment:
+        msg = MIMEMultipart()
+        msg.attach(MIMEText(body))
+        part = MIMEApplication(attachment[1], _subtype="pdf")
+        part.add_header("Content-Disposition", "attachment", filename=attachment[0])
+        msg.attach(part)
+    else:
+        msg = MIMEText(body)
     if to:
         msg["To"] = to
     msg["Subject"] = subject
@@ -50,6 +85,7 @@ def draft_outreach(row: dict, cfg: Config, llm: Callable[[str], str],
                    contact: dict | None) -> Draft:
     template = PROMPT.read_text(encoding="utf-8")
     prompt = template.format(
+        name=cfg.profile.name,
         profile_summary=cfg.profile.summary,
         company=row["Company"],
         title=row["Title"],
@@ -72,20 +108,29 @@ def outreach_row(creds, spreadsheet_id: str, row: dict, cfg: Config,
     try:
         contacts = find_contacts(company, client)
         contact = contacts[0] if contacts else None
+        if not contact or not contact.get("email"):
+            # HARD RULE: no recipient email -> no draft, ever.
+            sheets.update_cells(creds, spreadsheet_id, [
+                (row["_row"], "Contact", "no recruiter email found — draft skipped"),
+                (row["_row"], "Find people", linkedin_people_search_url(company)),
+            ])
+            return f"outreach skipped for {company}: no recruiter email found"
         draft = draft_outreach(row, cfg, llm, contact)
-        link = create_gmail_draft(
-            creds, (contact or {}).get("email", ""), draft.subject, draft.body
-        )
-        contact_label = (
-            f"{contact['name']} ({contact['title']})" + (f" <{contact['email']}>" if contact.get("email") else "")
-            if contact else "no contact found — use Find people"
-        )
+        body = f"{draft.body.rstrip()}\n\n{signature(cfg.profile)}\n"
+        attachment = None
+        pdf = _drive_pdf_bytes(creds, row.get("Tailored resume", ""))
+        if pdf:
+            fname = re.sub(r"[^A-Za-z0-9]+", "_", cfg.profile.name) + "_Resume.pdf"
+            attachment = (fname, pdf)
+        link = create_gmail_draft(creds, contact["email"], draft.subject, body,
+                                  attachment)
         sheets.update_cells(creds, spreadsheet_id, [
-            (row["_row"], "Contact", contact_label),
+            (row["_row"], "Contact",
+             f"{contact['name']} ({contact['title']}) <{contact['email']}>"),
             (row["_row"], "Draft", link),
             (row["_row"], "Find people", linkedin_people_search_url(company)),
         ])
-        return f"outreach drafted: {company} — {row['Title']}"
+        return f"outreach drafted: {company} — {row['Title']} -> {contact['email']}"
     except Exception as exc:  # noqa: BLE001
         return f"outreach FAILED for {company}: {type(exc).__name__}: {exc}"
 

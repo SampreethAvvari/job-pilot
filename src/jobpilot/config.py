@@ -23,6 +23,9 @@ class Profile(_Strict):
     sponsorship_needed: bool
     locations: list[str]
     summary: str = ""
+    portfolio: str = ""  # outreach signature links
+    linkedin: str = ""
+    github: str = ""
 
 
 class SourceCfg(_Strict):

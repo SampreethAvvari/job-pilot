@@ -9,6 +9,9 @@ profile:
   headline: Software Engineer (full-stack, ML, cloud)
   sponsorship_needed: false        # set true if you need visa sponsorship
   locations: [New York NY, Remote US]
+  portfolio: ""                    # links for the outreach email signature
+  linkedin: ""                     # (drafts are skipped when a link is empty)
+  github: ""
   summary: >
     2-4 sentences the scorer and tailor use to judge fit and write outreach.
     Mention your current role, strongest projects with concrete numbers, your
