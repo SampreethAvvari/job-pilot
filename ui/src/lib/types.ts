@@ -58,3 +58,16 @@ export type Job = {
   role: string;
   resumeAts: string;
 };
+
+// Companies watchlist tab (columns A-H — keep in sync with sheets.py COMPANIES_HEADERS)
+export type Company = {
+  row: number;
+  company: string;
+  careersUrl: string;
+  ats: string;
+  slug: string;
+  status: string;
+  lastChecked: string;
+  jobsLastFetch: string;
+  notes: string;
+};

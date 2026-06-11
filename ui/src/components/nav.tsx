@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/applied", label: "Applied", glyph: "✓" },
   { href: "/resumes", label: "Resumes", glyph: "❑" },
   { href: "/replies", label: "Replies", glyph: "⮌" },
+  { href: "/companies", label: "Companies", glyph: "▦" },
 ];
 
 export function Nav() {
