@@ -368,6 +368,12 @@ export function JobsTable({
                       ✉ Draft
                     </button>
                   )}
+                  <a href={`/assistant?job=${j.id}`}
+                     className="mt-0.5 block text-[11px] hover:underline"
+                     style={{ color: "var(--text-faint)" }}
+                     title="Chat about this job: application answers, resume tweaks, cover letter">
+                    💬 Ask
+                  </a>
                 </td>
                 {mode === "applied" && (
                   <td className="whitespace-nowrap" style={{ color: "var(--text-dim)" }}>

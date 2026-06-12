@@ -33,6 +33,38 @@ export async function readJobs(): Promise<Job[]> {
   });
 }
 
+/** Append a manually-tracked job (Assistant flow) using the canonical column
+ * order. The pipeline's dedup recognizes the id, so reruns never duplicate it. */
+export async function appendJob(j: {
+  id: string;
+  title: string;
+  company: string;
+  url: string;
+  jd: string;
+}) {
+  const row = new Array<string>(HEADERS.length).fill("");
+  const set = (header: string, value: string) => {
+    row[(HEADERS as readonly string[]).indexOf(header)] = value;
+  };
+  set("Date found", new Date().toISOString().slice(0, 10));
+  set("Job ID", j.id);
+  set("Title", j.title);
+  set("Company", j.company);
+  set("Posted age", "—");
+  set("URL", j.url);
+  set("Source", "manual");
+  set("Fit", "—");
+  set("Status", "New");
+  set("JD excerpt", j.jd);
+  await sheetsClient().spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: "Jobs!A1",
+    valueInputOption: "USER_ENTERED",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [row] },
+  });
+}
+
 export async function updateRow(row: number, updates: Record<string, string>) {
   const data = Object.entries(updates).map(([header, value]) => {
     const idx = (HEADERS as readonly string[]).indexOf(header);
