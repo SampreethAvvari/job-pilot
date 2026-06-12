@@ -76,9 +76,11 @@ def test_quality_filter_drops_non_us_locations():
                 location="Remote"),  # ambiguous — keep, the scorer judges
         Posting(title="ML Engineer", company="G", url="u7", source="lever",
                 location=""),  # unknown — keep
+        Posting(title="ML Engineer", company="H", url="u8", source="lever",
+                location="Vancouver, WA"),  # US state code beats city collision
     ]
     out = pipeline.quality_filter(postings, cfg, datetime.now(timezone.utc))
-    assert [p.company for p in out] == ["A", "D", "F", "G"]
+    assert [p.company for p in out] == ["A", "D", "F", "G", "H"]
 
 
 def test_quality_filter_us_only_can_be_disabled():

@@ -81,7 +81,11 @@ NON_US_RE = re.compile(
     re.IGNORECASE,
 )
 US_HINT_RE = re.compile(
-    r"\b(US|USA|U\.S\.|United States|America|Remote)\b", re.IGNORECASE)
+    r"\b(US|USA|U\.S\.|United States|America|Remote)\b"
+    # ", XX" US state code — keeps "Vancouver, WA" and friends
+    r"|,\s*(A[KLRZ]|C[AOT]|D[CE]|FL|GA|HI|I[ADLN]|K[SY]|LA|M[ADEINOST]"
+    r"|N[CDEHJMVY]|O[HKR]|PA|RI|S[CD]|T[NX]|UT|V[AT]|W[AIVY])\b",
+    re.IGNORECASE)
 
 
 def is_non_us(location: str) -> bool:
