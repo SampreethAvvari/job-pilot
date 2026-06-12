@@ -59,7 +59,7 @@ export default async function CompanyPage({
       </div>
 
       <JobsTable initial={companyJobs} mode="open" defaultStatus="New"
-                 resumeLinks={resumeLinksFromEnv()} />
+                 defaultSort="posted" resumeLinks={resumeLinksFromEnv()} />
     </div>
   );
 }

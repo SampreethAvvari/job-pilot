@@ -28,22 +28,23 @@ export function JobsTable({
   mode,
   resumeLinks = {},
   defaultStatus,
+  defaultSort,
 }: {
   initial: Job[];
   mode: "open" | "applied";
   resumeLinks?: Record<string, string>;
   defaultStatus?: string;
+  defaultSort?: "found" | "posted" | "fit";
 }) {
   const [jobs, setJobs] = useState(initial);
   const [status, setStatus] = useState(defaultStatus ?? (mode === "open" ? "New" : "all"));
   const [source, setSource] = useState("all");
   const [role, setRole] = useState("all");
   const [size, setSize] = useState("all");
-  const [minFit, setMinFit] = useState(0);
+  // under-70 fit is noise by default; unscored (manual) jobs are not "under 70"
+  const [minFit, setMinFit] = useState(mode === "open" ? 70 : 0);
   const [postedWithin, setPostedWithin] = useState(0); // hours; 0 = any
-  const [sortBy, setSortBy] = useState<"found" | "posted" | "fit">(
-    mode === "open" ? "found" : "found",
-  );
+  const [sortBy, setSortBy] = useState<"found" | "posted" | "fit">(defaultSort ?? "found");
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
   const [pendingApply, setPendingApply] = useState<Job | null>(null);
@@ -126,7 +127,7 @@ export function JobsTable({
       .filter((j) => source === "all" || j.source === source)
       .filter((j) => role === "all" || (j.role || j.resumeVariant) === role)
       .filter((j) => size === "all" || companySize(j.company) === size)
-      .filter((j) => (j.fit ?? -1) >= minFit)
+      .filter((j) => j.fit === null || j.fit >= minFit)
       .filter((j) => {
         if (!postedWithin) return true;
         if (!j.posted) return false;

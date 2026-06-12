@@ -18,18 +18,38 @@ export function jobsForCompany(c: Company, jobs: Job[]): Job[] {
   return jobs.filter((j) => aliases.has(norm(j.company)));
 }
 
-/** Still waiting for the user's action. Applied/Outreach/Response/Interview/
- * Offer/Rejected/Dismissed jobs are handled and drop out of the count. */
+/** The console-wide relevance gate: under-70 fit is hidden everywhere.
+ * Unscored jobs (manual adds) pass — unknown is not "under 70". */
+export const MIN_FIT = 70;
+
+/** Still waiting for the user's action AND relevant. Applied/Outreach/Response/
+ * Interview/Offer/Rejected/Dismissed or low-fit jobs drop out of the count. */
 export function isRemaining(j: Job): boolean {
-  return j.status === "" || j.status === "New";
+  return (
+    (j.status === "" || j.status === "New") &&
+    (j.fit === null || j.fit >= MIN_FIT)
+  );
 }
 
-/** Remaining-to-apply counts keyed by normalized company name (stable across
- * sheet-row renumbering, unlike row keys). */
-export function trackedCounts(companies: Company[], jobs: Job[]): Record<string, number> {
-  const counts: Record<string, number> = {};
+export type CompanyJobMeta = {
+  remaining: number; // jobs still waiting for action
+  newest: string;    // freshest remaining job's posted stamp ("YYYY-MM-DD HH:MM", "" unknown)
+};
+
+/** Per-company remaining count + freshest posting, keyed by normalized company
+ * name (stable across sheet-row renumbering, unlike row keys). */
+export function companyJobMeta(
+  companies: Company[],
+  jobs: Job[],
+): Record<string, CompanyJobMeta> {
+  const meta: Record<string, CompanyJobMeta> = {};
   for (const c of companies) {
-    counts[norm(c.company)] = jobsForCompany(c, jobs).filter(isRemaining).length;
+    const remaining = jobsForCompany(c, jobs).filter(isRemaining);
+    let newest = "";
+    for (const j of remaining) {
+      if (j.posted && j.posted > newest) newest = j.posted;
+    }
+    meta[norm(c.company)] = { remaining: remaining.length, newest };
   }
-  return counts;
+  return meta;
 }
