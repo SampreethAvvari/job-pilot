@@ -12,7 +12,17 @@ function statusColor(status: string): string {
   return "var(--amber)"; // pending / blank: resolver picks it up next run
 }
 
-export function CompaniesTable({ initial }: { initial: Company[] }) {
+function norm(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+export function CompaniesTable({
+  initial,
+  tracked = {},
+}: {
+  initial: Company[];
+  tracked?: Record<string, number>;
+}) {
   const [companies, setCompanies] = useState(initial);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -95,7 +105,7 @@ export function CompaniesTable({ initial }: { initial: Company[] }) {
         <table className="console-table">
           <thead>
             <tr>
-              <th>Company</th><th>ATS</th><th>Status</th><th>Jobs (last fetch)</th>
+              <th>Company</th><th>ATS</th><th>Status</th><th>Jobs</th>
               <th>Last checked</th><th>Notes</th><th></th>
             </tr>
           </thead>
@@ -115,7 +125,12 @@ export function CompaniesTable({ initial }: { initial: Company[] }) {
                 </td>
                 <td style={{ color: "var(--text-dim)" }}>{c.ats || "—"}</td>
                 <td style={{ color: statusColor(c.status) }}>{c.status || "pending"}</td>
-                <td>{c.jobsLastFetch || "—"}</td>
+                <td title={`tracked for you (matched at last fetch: ${c.jobsLastFetch || "0"})`}>
+                  <Link className="hover:underline"
+                        href={`/companies/${encodeURIComponent(c.company)}`}>
+                    {tracked[norm(c.company)] ?? 0}
+                  </Link>
+                </td>
                 <td className="whitespace-nowrap" style={{ color: "var(--text-dim)" }}>
                   {c.lastChecked || "—"}
                 </td>

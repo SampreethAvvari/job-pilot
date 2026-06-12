@@ -41,6 +41,24 @@ def fake_registry():
     return {"greenhouse": fake_fetch, "lever": broken_fetch}
 
 
+def test_quality_filter_board_sources_keep_older_postings():
+    # a posting on the company's own board is open as long as it is listed —
+    # only aggregator sources go stale at freshness_days
+    now = datetime.now(timezone.utc)
+    month_old = now - timedelta(days=30)
+    cfg = make_cfg()
+    postings = [
+        Posting(title="ML Engineer", company="A", url="u1", source="greenhouse",
+                posted_at=month_old),
+        Posting(title="ML Engineer", company="B", url="u2", source="adzuna",
+                posted_at=month_old),
+        Posting(title="ML Engineer", company="C", url="u3", source="workday",
+                posted_at=now - timedelta(days=90)),  # beyond even the board window
+    ]
+    out = pipeline.quality_filter(postings, cfg, now)
+    assert [p.company for p in out] == ["A"]
+
+
 def test_dry_run_end_to_end(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(pipeline, "registry", fake_registry)
     monkeypatch.chdir(tmp_path)

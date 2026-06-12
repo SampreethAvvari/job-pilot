@@ -1,4 +1,6 @@
 import { readCompanies } from "@/lib/companies";
+import { readJobs } from "@/lib/jobs";
+import { norm, trackedCounts } from "@/lib/company-match";
 import type { Company } from "@/lib/types";
 import { CompaniesTable } from "@/components/companies-table";
 
@@ -11,6 +13,13 @@ export default async function CompaniesPage() {
   } catch {
     // Companies tab is created by the pipeline's first run; empty until then
   }
+  const jobs = await readJobs();
+  const tracked = trackedCounts(companies, jobs);
+  companies.sort(
+    (a, b) =>
+      (tracked[norm(b.company)] ?? 0) - (tracked[norm(a.company)] ?? 0) ||
+      a.company.localeCompare(b.company),
+  );
 
   return (
     <div className="rise">
@@ -21,12 +30,13 @@ export default async function CompaniesPage() {
           Career boards polled directly every 30 minutes. Add a company by name —
           the pipeline auto-detects its ATS (Greenhouse, Lever, Ashby, Workday,
           SmartRecruiters, Workable, Recruitee). Paste the careers URL for Workday
-          companies; boards we can&apos;t reach are marked unsupported and stay
-          covered by the aggregator sources.
+          companies. <b>Jobs</b> counts the roles tracked for you — matching your
+          target titles, early-career, sponsorship-viable — exactly what opens
+          when you click the company.
         </p>
       </div>
 
-      <CompaniesTable initial={companies} />
+      <CompaniesTable initial={companies} tracked={tracked} />
     </div>
   );
 }

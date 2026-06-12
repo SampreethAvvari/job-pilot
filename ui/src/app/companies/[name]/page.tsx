@@ -2,17 +2,11 @@ import Link from "next/link";
 
 import { readCompanies } from "@/lib/companies";
 import { readJobs } from "@/lib/jobs";
+import { jobsForCompany, norm } from "@/lib/company-match";
 import { resumeLinksFromEnv } from "@/lib/resume-links";
 import { JobsTable } from "@/components/jobs-table";
 
 export const dynamic = "force-dynamic";
-
-/** Job rows store company names as boards report them ("nvidia" tenant,
- * "Acme Corp" display name); the watchlist has display names ("Nvidia").
- * Normalize both and also accept the board slug's first segment. */
-function norm(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
 
 export default async function CompanyPage({
   params,
@@ -26,11 +20,9 @@ export default async function CompanyPage({
     readJobs(),
   ]);
   const watch = watchlist.find((c) => norm(c.company) === norm(company));
-
-  const aliases = new Set([norm(company)]);
-  if (watch?.company) aliases.add(norm(watch.company));
-  if (watch?.slug) aliases.add(norm(watch.slug.split("/")[0]));
-  const companyJobs = jobs.filter((j) => aliases.has(norm(j.company)));
+  const companyJobs = watch
+    ? jobsForCompany(watch, jobs)
+    : jobs.filter((j) => norm(j.company) === norm(company));
 
   return (
     <div className="rise">

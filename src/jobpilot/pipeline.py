@@ -59,11 +59,15 @@ def fetch_all(cfg: Config, only: list[str] | None = None) -> tuple[list[Posting]
 
 def quality_filter(postings: list[Posting], cfg: Config, now: datetime) -> list[Posting]:
     """Drop stale postings, excluded seniority/role words, and citizenship/clearance JDs."""
+    from jobpilot.companies import ATS_SOURCES
+
     cutoff = now - timedelta(days=cfg.caps.freshness_days)
+    board_cutoff = now - timedelta(days=cfg.caps.board_freshness_days)
     jd_patterns = [re.compile(pat, re.IGNORECASE) for pat in cfg.exclude_jd_patterns]
     out = []
     for p in postings:
-        if p.posted_at and p.posted_at < cutoff:
+        limit = board_cutoff if p.source in ATS_SOURCES else cutoff
+        if p.posted_at and p.posted_at < limit:
             continue
         title = p.title.lower()
         if any(re.search(rf"\b{re.escape(w)}\b", title) for w in cfg.exclude_title_words):

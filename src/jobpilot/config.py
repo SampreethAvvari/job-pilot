@@ -58,6 +58,9 @@ class Caps(_Strict):
     per_source: int = 100
     per_company: int = 25  # max matched jobs per company per run (board sources)
     freshness_days: int = 7  # drop postings older than this (unknown dates kept)
+    # Direct company boards list a job only while it is open, so age means far
+    # less there than on aggregators full of stale reposts.
+    board_freshness_days: int = 60
 
 
 class SheetCfg(_Strict):
