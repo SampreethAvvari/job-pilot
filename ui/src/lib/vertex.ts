@@ -11,7 +11,22 @@ const auth = new GoogleAuth({
 export const FLASH = process.env.ASSISTANT_MODEL_FLASH ?? "gemini-2.5-flash";
 export const PRO = process.env.ASSISTANT_MODEL_PRO ?? "gemini-2.5-pro";
 
-export type ChatMessage = { role: "user" | "model"; text: string };
+export type Attachment = { mimeType: string; data: string }; // base64, no data: prefix
+
+export type ChatMessage = {
+  role: "user" | "model";
+  text: string;
+  attachments?: Attachment[];
+};
+
+function toParts(m: ChatMessage) {
+  return [
+    ...(m.attachments ?? []).map((a) => ({
+      inlineData: { mimeType: a.mimeType, data: a.data },
+    })),
+    { text: m.text },
+  ];
+}
 
 export async function generate(
   model: string,
@@ -30,7 +45,7 @@ export async function generate(
     method: "POST",
     data: {
       systemInstruction: { parts: [{ text: system }] },
-      contents: messages.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
+      contents: messages.map((m) => ({ role: m.role, parts: toParts(m) })),
       ...(search ? { tools: [{ googleSearch: {} }] } : {}),
       generationConfig: { temperature: 0.6, maxOutputTokens: maxTokens },
     },

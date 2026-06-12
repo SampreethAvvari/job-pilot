@@ -4,9 +4,16 @@ import { useEffect, useRef, useState } from "react";
 
 import type { Job } from "@/lib/types";
 
-type Msg = { role: "user" | "model"; text: string; links?: { label: string; href: string }[] };
+type Attachment = { mimeType: string; data: string; name: string };
+type Msg = {
+  role: "user" | "model";
+  text: string;
+  links?: { label: string; href: string }[];
+  attachments?: Attachment[];
+};
 
-const STORE = "assistant-chat-v1";
+const FILE_TYPES = "image/png,image/jpeg,image/webp,application/pdf";
+const MAX_FILE_MB = 10;
 
 export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -18,19 +25,16 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
   const [showPaste, setShowPaste] = useState(false);
   const [paste, setPaste] = useState({ company: "", title: "", url: "", jd: "" });
   const [generating, setGenerating] = useState(false);
+  const [pending, setPending] = useState<Attachment[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORE) ?? "[]");
-      if (Array.isArray(saved) && saved.length && !initialJobId) setMessages(saved);
-    } catch { /* fresh start */ }
     fetch("/api/jobs").then((r) => r.json())
       .then((d) => d.jobs && setJobs(d.jobs as Job[])).catch(() => {});
-  }, [initialJobId]);
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORE, JSON.stringify(messages.slice(-40)));
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -41,11 +45,35 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
     setMessages((ms) => [...ms, m]);
   }
 
+  async function addFiles(files: FileList | null) {
+    if (!files) return;
+    for (const f of Array.from(files)) {
+      if (f.size > MAX_FILE_MB * 1024 * 1024) {
+        push({ role: "model", text: `${f.name} is over ${MAX_FILE_MB}MB, skipped.` });
+        continue;
+      }
+      const data = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+        r.onerror = reject;
+        r.readAsDataURL(f);
+      });
+      setPending((p) => [...p, { mimeType: f.type, data, name: f.name }]);
+    }
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   async function send() {
     const text = input.trim();
-    if (!text || busy) return;
+    if ((!text && pending.length === 0) || busy) return;
     setInput("");
-    const history = [...messages, { role: "user" as const, text }];
+    const userMsg: Msg = {
+      role: "user",
+      text: text || "See the attached file(s).",
+      attachments: pending.length ? pending : undefined,
+    };
+    setPending([]);
+    const history = [...messages, userMsg];
     setMessages(history);
     setBusy(true);
     try {
@@ -53,7 +81,10 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: history.map(({ role, text }) => ({ role, text })),
+          messages: history.map(({ role, text, attachments }) => ({
+            role, text,
+            attachments: attachments?.map(({ mimeType, data }) => ({ mimeType, data })),
+          })),
           model,
           jobId: jobId || undefined,
         }),
@@ -65,6 +96,11 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  function clearChat() {
+    setMessages([]);
+    setPending([]);
   }
 
   function attachPaste() {
@@ -149,6 +185,12 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
           {showPaste ? "hide" : "+ paste an untracked job"}
         </button>
         <span className="ml-auto flex items-center gap-1">
+          {messages.length > 0 && (
+            <button className="btn-ghost px-2 py-1 text-xs" onClick={clearChat}
+                    title="Start a fresh conversation — nothing is saved anyway">
+              ⟳ clear chat
+            </button>
+          )}
           {(["flash", "pro"] as const).map((m) => (
             <button key={m} onClick={() => setModel(m)}
                     className="px-2 py-1 text-xs"
@@ -207,6 +249,12 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
             padding: "6px 10px",
             borderRadius: 8,
           }}>
+            {m.attachments && m.attachments.length > 0 && (
+              <span className="mb-1 flex flex-wrap gap-1 text-[10px]"
+                    style={{ color: "var(--text-dim)" }}>
+                {m.attachments.map((a, k) => <span key={k}>📎 {a.name}</span>)}
+              </span>
+            )}
             {m.text}
             {m.links && (
               <span className="mt-1 flex gap-3 text-xs">
@@ -224,7 +272,19 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
         <div ref={endRef} />
       </div>
 
-      <div className="panel flex items-end gap-2 p-3">
+      <div className="panel flex flex-col gap-2 p-3">
+        {pending.length > 0 && (
+          <span className="flex flex-wrap gap-2 text-[11px]" style={{ color: "var(--text-dim)" }}>
+            {pending.map((a, k) => (
+              <span key={k} className="flex items-center gap-1">
+                📎 {a.name}
+                <button onClick={() => setPending((p) => p.filter((_, i) => i !== k))}
+                        style={{ color: "var(--red)" }}>✕</button>
+              </span>
+            ))}
+          </span>
+        )}
+        <div className="flex items-end gap-2">
         <textarea
           className="panel min-h-16 grow px-2 py-1.5 text-sm"
           placeholder="Ask for a resume rewrite, a cover letter, or an application answer…"
@@ -235,7 +295,15 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
           }}
         />
         <div className="flex flex-col gap-2">
-          <button className="btn-amber" disabled={busy || !input.trim()} onClick={send}>
+          <input ref={fileRef} type="file" multiple accept={FILE_TYPES} hidden
+                 onChange={(e) => addFiles(e.target.files)} />
+          <button className="btn-ghost px-2 py-1 text-xs"
+                  onClick={() => fileRef.current?.click()}
+                  title="Attach screenshots or PDFs (JD screenshots, your current resume…)">
+            📎 attach
+          </button>
+          <button className="btn-amber" disabled={busy || (!input.trim() && pending.length === 0)}
+                  onClick={send}>
             Send
           </button>
           {(job || pasteReady) && (
@@ -245,6 +313,7 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
               {generating ? "generating…" : "⚙ Generate resume + cover PDFs"}
             </button>
           )}
+        </div>
         </div>
       </div>
     </div>

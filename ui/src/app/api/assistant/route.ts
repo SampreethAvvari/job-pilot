@@ -54,6 +54,14 @@ export async function POST(request: Request) {
     if (!Array.isArray(messages) || messages.length === 0) {
       return Response.json({ error: "messages required" }, { status: 400 });
     }
+    const attachedBytes = messages.flatMap((m) => m.attachments ?? [])
+      .reduce((n, a) => n + a.data.length * 0.75, 0);
+    if (attachedBytes > 15 * 1024 * 1024) {
+      return Response.json(
+        { error: "attachments exceed 15MB total — start a fresh chat or use smaller files" },
+        { status: 400 },
+      );
+    }
     const pack = await knowledgePack();
     let jobContext = "";
     if (jobId) {
