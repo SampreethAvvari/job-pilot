@@ -51,6 +51,7 @@ jobs:
             --service-account jobpilot-runner@jobpilot-sva.iam.gserviceaccount.com \
             --task-timeout 45m \
             --max-retries 0 \
+            --memory 2Gi \
             --quiet
 
   deploy-ui:
