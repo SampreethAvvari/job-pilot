@@ -58,7 +58,9 @@ def test_generate_retries_then_fails():
 JUDGE_REPORT = {"score": 92.0, "breakdown": {}, "keyword_coverage": 0.9,
                 "pages": 1, "words": 500, "issues": [], "attempts": 1}
 ROW = {"_row": 2, "Company": "Acme", "Title": "MLE", "Job ID": "abc",
-       "JD excerpt": "We need RAG", "Resume variant": "MLE", "URL": "https://x.test/j"}
+       # long enough to skip the live-page JD recovery path (MIN_JD_CHARS)
+       "JD excerpt": "We need RAG pipelines and Kubernetes on GCP. " * 8,
+       "Resume variant": "MLE", "URL": "https://x.test/j"}
 
 
 def _patch_tailor_io(monkeypatch, reports, uploads):
@@ -78,6 +80,64 @@ def _patch_tailor_io(monkeypatch, reports, uploads):
     monkeypatch.setattr(
         sh, "append_report",
         lambda c, s, kind, key, score, js, ts: reports.append((kind, key, js)))
+
+
+def test_tailor_row_recovers_missing_jd_from_posting_url(monkeypatch):
+    import jobpilot.explain as ex
+    import jobpilot.sheets as sh
+    import jobpilot.tailor as t
+
+    reports, uploads = [], []
+    _patch_tailor_io(monkeypatch, reports, uploads)
+    cells = []
+    monkeypatch.setattr(sh, "update_cells", lambda c, s, u: cells.extend(u))
+    monkeypatch.setattr(ex, "latexdiff_pdf", lambda b, new, n: None)
+    monkeypatch.setattr(ex, "generate_report",
+                        lambda p, llm: ex.TransparencyReport(resume_rationale="why"))
+    monkeypatch.setattr(t, "_fetch_jd", lambda url: "We need RAG on GCP. " * 20)
+
+    row = dict(ROW, **{"JD excerpt": ""})
+    note = t.tailor_row("creds", "sid", row, make_cfg(), lambda p: valid_payload(), NOW)
+    assert note.startswith("tailored:")
+    assert any(h == "JD excerpt" for _, h, _ in cells)  # recovered JD persisted
+
+
+def test_tailor_row_marks_row_when_jd_unavailable(monkeypatch):
+    import jobpilot.sheets as sh
+    import jobpilot.tailor as t
+
+    reports, uploads = [], []
+    _patch_tailor_io(monkeypatch, reports, uploads)
+    cells = []
+    monkeypatch.setattr(sh, "update_cells", lambda c, s, u: cells.extend(u))
+    monkeypatch.setattr(t, "_fetch_jd", lambda url: "")
+
+    row = dict(ROW, **{"JD excerpt": ""})
+    note = t.tailor_row("creds", "sid", row, make_cfg(), None, NOW)
+    assert "JD not accessible" in note
+    assert any(h == "Tailored resume" and str(v).startswith("FAILED")
+               for _, h, v in cells)
+
+
+def test_tailor_row_failure_lands_on_the_row(monkeypatch):
+    import jobpilot.rewrite_loop as rl
+    import jobpilot.sheets as sh
+    import jobpilot.tailor as t
+
+    reports, uploads = [], []
+    _patch_tailor_io(monkeypatch, reports, uploads)
+    cells = []
+    monkeypatch.setattr(sh, "update_cells", lambda c, s, u: cells.extend(u))
+
+    def boom(*a, **k):
+        raise CompileError("pdflatex failed")
+
+    monkeypatch.setattr(rl, "best_of_attempts", boom)
+    note = t.tailor_row("creds", "sid", dict(ROW), make_cfg(),
+                        lambda p: valid_payload(), NOW)
+    assert note.startswith("tailor FAILED")
+    assert any(h == "Tailored resume" and str(v).startswith("FAILED")
+               for _, h, v in cells)
 
 
 def test_tailor_row_appends_transparency_report(monkeypatch):

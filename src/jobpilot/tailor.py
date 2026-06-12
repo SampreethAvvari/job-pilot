@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+import httpx
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaInMemoryUpload
 from pydantic import BaseModel, Field
@@ -18,6 +19,24 @@ from pydantic import BaseModel, Field
 from jobpilot import sheets
 from jobpilot.config import Config
 from jobpilot.latexpdf import CompileError, compile_pdf
+from jobpilot.sources.common import strip_html
+
+# Below this many JD characters, tailoring would just guess — recover the JD
+# from the live posting page first, or refuse with a visible reason.
+MIN_JD_CHARS = 200
+
+
+def _fetch_jd(url: str) -> str:
+    """Best-effort JD recovery: fetch the live posting page, strip to text."""
+    if not url:
+        return ""
+    try:
+        resp = httpx.get(url, timeout=20, follow_redirects=True,
+                         headers={"User-Agent": "Mozilla/5.0 (compatible; JobPilot)"})
+        resp.raise_for_status()
+        return strip_html(resp.text)
+    except httpx.HTTPError:
+        return ""
 
 RESUME_DIR = Path(__file__).parent / "resumes"
 PROMPT = Path(__file__).parent / "prompts" / "tailor_v1.txt"
@@ -108,6 +127,19 @@ def tailor_row(creds, spreadsheet_id: str, row: dict, cfg: Config,
     variant = row.get("Resume variant") or "FDE"
     description = row.get("JD excerpt") or ""
     try:
+        if len(description.strip()) < MIN_JD_CHARS:
+            description = _fetch_jd(row.get("URL", ""))
+            if len(description.strip()) >= MIN_JD_CHARS:
+                # persist so scoring/outreach/explain see the recovered JD too
+                sheets.update_cells(creds, spreadsheet_id,
+                                    [(row["_row"], "JD excerpt", description[:5000])])
+            else:
+                sheets.update_cells(creds, spreadsheet_id, [(
+                    row["_row"], "Tailored resume",
+                    "FAILED: JD not accessible — the posting page gave no text; "
+                    "open the apply link and retry later",
+                )])
+                return f"tailor SKIPPED for {company} — {title}: JD not accessible"
         base_prompt = _build_prompt(company, title, description, variant)
         extras: dict[int, TailorResult] = {}
 
@@ -174,7 +206,13 @@ def tailor_row(creds, spreadsheet_id: str, row: dict, cfg: Config,
             note += f" | transparency report FAILED: {type(exc).__name__}: {exc}"
         return note
     except Exception as exc:  # noqa: BLE001 — one failure must not kill the batch
-        return f"tailor FAILED for {company} — {title}: {type(exc).__name__}: {exc}"
+        err = f"{type(exc).__name__}: {exc}"
+        try:  # surface on the row — otherwise the console button blinks and gives up silently
+            sheets.update_cells(creds, spreadsheet_id,
+                                [(row["_row"], "Tailored resume", f"FAILED: {err[:160]}")])
+        except Exception:  # noqa: BLE001 — reporting must not mask the original error
+            pass
+        return f"tailor FAILED for {company} — {title}: {err}"
 
 
 def auto_tailor(creds, spreadsheet_id: str, cfg: Config, llm: Callable[[str], str],
