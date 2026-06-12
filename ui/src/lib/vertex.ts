@@ -7,8 +7,9 @@ const auth = new GoogleAuth({
 });
 
 // Model ids env-overridable so a rename never needs a redeploy.
+// (3.x Gemini isn't enabled for this project; 2.5-pro is the available Pro tier.)
 export const FLASH = process.env.ASSISTANT_MODEL_FLASH ?? "gemini-2.5-flash";
-export const PRO = process.env.ASSISTANT_MODEL_PRO ?? "gemini-3.1-pro";
+export const PRO = process.env.ASSISTANT_MODEL_PRO ?? "gemini-2.5-pro";
 
 export type ChatMessage = { role: "user" | "model"; text: string };
 
