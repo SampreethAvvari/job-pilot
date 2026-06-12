@@ -145,12 +145,14 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
             print(note)
         return scored
 
+    from jobpilot import knowledge
     from jobpilot.outreach import auto_outreach
     from jobpilot.tailor import auto_tailor, make_tailor_llm
 
     tailor_llm = make_tailor_llm(cfg)
     notes.extend(auto_tailor(creds, sid, cfg, tailor_llm, now))
     notes.extend(auto_outreach(creds, sid, cfg, tailor_llm, now))
+    notes.extend(knowledge.refresh(creds, sid, cfg, now))  # keeps the Assistant grounded
     html = digest.build_html(scored, sheets.url_for(sid), now, cfg.scoring.threshold, notes)
     digest.send(creds, cfg, html, now, n_matches)
     print(f"run complete: {len(scored)} new jobs, {n_matches} matches, sheet {sid}")

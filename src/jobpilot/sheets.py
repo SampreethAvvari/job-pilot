@@ -321,6 +321,57 @@ def update_company_rows(creds, spreadsheet_id: str,
     ).execute()
 
 
+KNOWLEDGE_HEADERS = ["Source", "Updated", "Content"]
+EXTRAS_HINT = ("Edit this row freely — facts the auto sources miss "
+               "(LinkedIn highlights, awards, talks). Refresh never touches it.")
+
+
+def ensure_knowledge_tab(creds, spreadsheet_id: str) -> None:
+    svc = _svc(creds)
+    meta = svc.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    titles = [s["properties"]["title"] for s in meta["sheets"]]
+    if "Knowledge" in titles:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": "Knowledge"}}}]},
+    ).execute()
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="Knowledge!A1", valueInputOption="RAW",
+        body={"values": [KNOWLEDGE_HEADERS, ["extras", "", EXTRAS_HINT]]},
+    ).execute()
+
+
+def read_knowledge(creds, spreadsheet_id: str) -> list[list[str]]:
+    """Knowledge rows as [source, updated, content]."""
+    ensure_knowledge_tab(creds, spreadsheet_id)
+    resp = (
+        _svc(creds)
+        .spreadsheets()
+        .values()
+        .get(spreadsheetId=spreadsheet_id, range="Knowledge!A2:C")
+        .execute()
+    )
+    return [row + [""] * (3 - len(row)) for row in resp.get("values", [])]
+
+
+def write_knowledge(creds, spreadsheet_id: str, sections: dict[str, str],
+                    now_str: str) -> None:
+    """Replace the auto-built rows; user-owned rows (e.g. extras) survive."""
+    existing = read_knowledge(creds, spreadsheet_id)
+    kept = [r for r in existing if r[0] and r[0] not in sections]
+    values = [[name, now_str, content[:45000]]
+              for name, content in sections.items() if content] + kept
+    svc = _svc(creds)
+    svc.spreadsheets().values().clear(
+        spreadsheetId=spreadsheet_id, range="Knowledge!A2:C1000").execute()
+    if values:
+        svc.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id, range="Knowledge!A2",
+            valueInputOption="RAW", body={"values": values},
+        ).execute()
+
+
 def read_rows(creds, spreadsheet_id: str) -> list[dict]:
     """All job rows as dicts keyed by header, with 1-based sheet row numbers."""
     resp = (
