@@ -59,6 +59,37 @@ def test_quality_filter_board_sources_keep_older_postings():
     assert [p.company for p in out] == ["A"]
 
 
+def test_quality_filter_drops_non_us_locations():
+    cfg = make_cfg()
+    postings = [
+        Posting(title="ML Engineer", company="A", url="u1", source="greenhouse",
+                location="New York, NY"),
+        Posting(title="ML Engineer", company="B", url="u2", source="greenhouse",
+                location="Sydney, Australia"),
+        Posting(title="ML Engineer", company="C", url="u3", source="ashby",
+                location="Bengaluru, India"),
+        Posting(title="ML Engineer", company="D", url="u4", source="ashby",
+                location="London, UK or Remote (US)"),  # US option present — keep
+        Posting(title="ML Engineer", company="E", url="u5", source="recruitee",
+                location="Amsterdam, Netherlands"),
+        Posting(title="ML Engineer", company="F", url="u6", source="lever",
+                location="Remote"),  # ambiguous — keep, the scorer judges
+        Posting(title="ML Engineer", company="G", url="u7", source="lever",
+                location=""),  # unknown — keep
+    ]
+    out = pipeline.quality_filter(postings, cfg, datetime.now(timezone.utc))
+    assert [p.company for p in out] == ["A", "D", "F", "G"]
+
+
+def test_quality_filter_us_only_can_be_disabled():
+    cfg = make_cfg()
+    cfg.us_only = False
+    postings = [Posting(title="ML Engineer", company="B", url="u", source="greenhouse",
+                        location="Sydney, Australia")]
+    out = pipeline.quality_filter(postings, cfg, datetime.now(timezone.utc))
+    assert len(out) == 1
+
+
 def test_dry_run_end_to_end(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(pipeline, "registry", fake_registry)
     monkeypatch.chdir(tmp_path)

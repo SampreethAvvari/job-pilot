@@ -57,8 +57,40 @@ def fetch_all(cfg: Config, only: list[str] | None = None) -> tuple[list[Posting]
     return postings, notes
 
 
+# Clearly-non-US location markers (countries, hub cities, regions). A posting is
+# dropped only when one of these matches AND no US hint is present, so
+# "London or Remote (US)" survives. Empty/ambiguous locations are kept — the
+# scorer judges those.
+NON_US_RE = re.compile(
+    r"\b(Canada|Toronto|Montreal|Ottawa|Calgary|Vancouver|"
+    r"UK|U\.K\.|United Kingdom|England|Scotland|London|Ireland|Dublin|"
+    r"Germany|Berlin|Munich|France|Paris|Netherlands|Amsterdam|Belgium|Brussels|"
+    r"Spain|Madrid|Barcelona|Portugal|Lisbon|Italy|Milan|Rome|"
+    r"Poland|Warsaw|Krakow|Czech|Prague|Hungary|Budapest|Romania|Bucharest|"
+    r"Sweden|Stockholm|Denmark|Copenhagen|Norway|Oslo|Finland|Helsinki|"
+    r"Switzerland|Zurich|Geneva|Austria|Vienna|Greece|Athens|Estonia|Tallinn|"
+    r"Ukraine|Kyiv|Turkey|Istanbul|Israel|Tel Aviv|UAE|Dubai|Abu Dhabi|"
+    r"Saudi|Riyadh|Egypt|Cairo|Nigeria|Lagos|South Africa|Cape Town|Johannesburg|"
+    r"India|Bengaluru|Bangalore|Hyderabad|Pune|Mumbai|Delhi|Gurgaon|Gurugram|"
+    r"Noida|Chennai|Singapore|Japan|Tokyo|China|Shanghai|Beijing|Shenzhen|"
+    r"Hong Kong|Taiwan|Taipei|Korea|Seoul|Vietnam|Indonesia|Jakarta|Thailand|"
+    r"Bangkok|Malaysia|Kuala Lumpur|Philippines|Manila|"
+    r"Australia|Sydney|Melbourne|Brisbane|New Zealand|Auckland|"
+    r"Brazil|S[aã]o Paulo|Mexico City|Argentina|Buenos Aires|Colombia|Bogot[aá]|"
+    r"Chile|Santiago|Costa Rica|EMEA|APAC|LATAM|Europe)\b",
+    re.IGNORECASE,
+)
+US_HINT_RE = re.compile(
+    r"\b(US|USA|U\.S\.|United States|America|Remote)\b", re.IGNORECASE)
+
+
+def is_non_us(location: str) -> bool:
+    return bool(NON_US_RE.search(location)) and not US_HINT_RE.search(location)
+
+
 def quality_filter(postings: list[Posting], cfg: Config, now: datetime) -> list[Posting]:
-    """Drop stale postings, excluded seniority/role words, and citizenship/clearance JDs."""
+    """Drop stale postings, excluded seniority/role words, non-US locations,
+    and citizenship/clearance JDs."""
     from jobpilot.companies import ATS_SOURCES
 
     cutoff = now - timedelta(days=cfg.caps.freshness_days)
@@ -68,6 +100,8 @@ def quality_filter(postings: list[Posting], cfg: Config, now: datetime) -> list[
     for p in postings:
         limit = board_cutoff if p.source in ATS_SOURCES else cutoff
         if p.posted_at and p.posted_at < limit:
+            continue
+        if cfg.us_only and is_non_us(p.location):
             continue
         title = p.title.lower()
         if any(re.search(rf"\b{re.escape(w)}\b", title) for w in cfg.exclude_title_words):

@@ -109,6 +109,7 @@ DEFAULT_JD_EXCLUDES = [
 class Config(_Strict):
     profile: Profile
     queries: list[str]
+    us_only: bool = True  # drop postings whose location is clearly outside the US
     exclude_title_words: list[str] = DEFAULT_EXCLUDES
     exclude_jd_patterns: list[str] = DEFAULT_JD_EXCLUDES
     sources: dict[str, SourceCfg]
