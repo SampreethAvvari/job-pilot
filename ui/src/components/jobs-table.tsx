@@ -84,7 +84,12 @@ export function JobsTable({
   }
 
   const analyze = (job: Job) =>
-    runJobAction(job, "/api/tailor", (j) => !!j.tailoredResume, setTailoring);
+    runJobAction(
+      job, "/api/tailor",
+      // wait for the value to CHANGE — a retried row already holds a FAILED marker
+      (j) => !!j.tailoredResume && j.tailoredResume !== job.tailoredResume,
+      setTailoring,
+    );
   const draftOutreach = (job: Job) =>
     runJobAction(job, "/api/outreach", (j) => !!j.draft, setDrafting);
 
@@ -306,7 +311,7 @@ export function JobsTable({
                   ) : (j.resumeVariant || "—")}
                 </td>
                 <td className="whitespace-nowrap">
-                  {j.tailoredResume ? (
+                  {j.tailoredResume && !j.tailoredResume.startsWith("FAILED") ? (
                     <span className="flex flex-col gap-0.5 text-[11px]">
                       <a href={j.tailoredResume} target="_blank" rel="noopener"
                          className="hover:underline" style={{ color: "var(--green)" }}
@@ -324,11 +329,19 @@ export function JobsTable({
                       tailoring…
                     </span>
                   ) : (
-                    <button onClick={() => analyze(j)}
-                            className="btn-ghost px-2 py-1 text-[11px]"
-                            title="Extract JD keywords + generate tailored resume & cover letter (~1 min)">
-                      ✨ Tailor
-                    </button>
+                    <span className="flex flex-col gap-0.5">
+                      {j.tailoredResume.startsWith("FAILED") && (
+                        <span className="text-[11px]" style={{ color: "var(--red)" }}
+                              title={j.tailoredResume}>
+                          ✕ failed — hover for why
+                        </span>
+                      )}
+                      <button onClick={() => analyze(j)}
+                              className="btn-ghost px-2 py-1 text-[11px]"
+                              title="Extract JD keywords + generate tailored resume & cover letter (~1 min)">
+                        ✨ Tailor
+                      </button>
+                    </span>
                   )}
                 </td>
                 <td className="whitespace-nowrap">

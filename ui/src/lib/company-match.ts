@@ -18,12 +18,18 @@ export function jobsForCompany(c: Company, jobs: Job[]): Job[] {
   return jobs.filter((j) => aliases.has(norm(j.company)));
 }
 
-/** Tracked-job counts keyed by normalized company name (stable across
+/** Still waiting for the user's action. Applied/Outreach/Response/Interview/
+ * Offer/Rejected/Dismissed jobs are handled and drop out of the count. */
+export function isRemaining(j: Job): boolean {
+  return j.status === "" || j.status === "New";
+}
+
+/** Remaining-to-apply counts keyed by normalized company name (stable across
  * sheet-row renumbering, unlike row keys). */
 export function trackedCounts(companies: Company[], jobs: Job[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const c of companies) {
-    counts[norm(c.company)] = jobsForCompany(c, jobs).length;
+    counts[norm(c.company)] = jobsForCompany(c, jobs).filter(isRemaining).length;
   }
   return counts;
 }

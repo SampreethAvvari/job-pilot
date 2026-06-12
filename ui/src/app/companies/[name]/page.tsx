@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { readCompanies } from "@/lib/companies";
 import { readJobs } from "@/lib/jobs";
-import { jobsForCompany, norm } from "@/lib/company-match";
+import { isRemaining, jobsForCompany, norm } from "@/lib/company-match";
 import { resumeLinksFromEnv } from "@/lib/resume-links";
 import { JobsTable } from "@/components/jobs-table";
 
@@ -51,14 +51,14 @@ export default async function CompanyPage({
           )}
         </div>
         <p className="mt-1 text-xs" style={{ color: "var(--text-dim)" }}>
-          {companyJobs.length} tracked job{companyJobs.length === 1 ? "" : "s"} matching
-          your target roles — scored, filtered for seniority and sponsorship, with
-          tailoring and outreach available per job. Roles outside your queries are
-          not ingested.
+          {companyJobs.filter(isRemaining).length} left to apply ·{" "}
+          {companyJobs.length} tracked in total. Matching your target roles —
+          scored, filtered for seniority and sponsorship, with tailoring and
+          outreach per job. Switch the status filter to see handled jobs.
         </p>
       </div>
 
-      <JobsTable initial={companyJobs} mode="open" defaultStatus="all"
+      <JobsTable initial={companyJobs} mode="open" defaultStatus="New"
                  resumeLinks={resumeLinksFromEnv()} />
     </div>
   );

@@ -30,9 +30,9 @@ export default async function CompaniesPage() {
           Career boards polled directly every 30 minutes. Add a company by name —
           the pipeline auto-detects its ATS (Greenhouse, Lever, Ashby, Workday,
           SmartRecruiters, Workable, Recruitee). Paste the careers URL for Workday
-          companies. <b>Jobs</b> counts the roles tracked for you — matching your
-          target titles, early-career, sponsorship-viable — exactly what opens
-          when you click the company.
+          companies. <b>Jobs</b> counts what&apos;s left for you to act on — relevant
+          roles you haven&apos;t applied to, dismissed, or been rejected from. Apply
+          to a job anywhere in the console and the count drops on the next view.
         </p>
       </div>
 
