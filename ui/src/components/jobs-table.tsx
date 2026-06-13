@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { companySize, SIZE_BUCKETS } from "@/lib/company-size";
 import { isApplied } from "@/lib/status-sets";
 import type { Job } from "@/lib/types";
-import { ROLES, STATUSES } from "@/lib/types";
+import { RESUME_VARIANTS, ROLES, STATUSES } from "@/lib/types";
 import { AtsBadge } from "@/components/ats-report";
 import { FitMeter } from "@/components/status";
 
@@ -40,6 +40,7 @@ export function JobsTable({
   const [status, setStatus] = useState(defaultStatus ?? (mode === "open" ? "New" : "all"));
   const [source, setSource] = useState("all");
   const [role, setRole] = useState("all");
+  const [resume, setResume] = useState("all"); // best-match master resume (FDE/AIE/MLE/SDE)
   const [size, setSize] = useState("all");
   // under-70 fit is noise by default; unscored (manual) jobs are not "under 70"
   const [minFit, setMinFit] = useState(mode === "open" ? 70 : 0);
@@ -126,6 +127,7 @@ export function JobsTable({
       })
       .filter((j) => source === "all" || j.source === source)
       .filter((j) => role === "all" || (j.role || j.resumeVariant) === role)
+      .filter((j) => resume === "all" || j.resumeVariant === resume)
       .filter((j) => size === "all" || companySize(j.company) === size)
       .filter((j) => j.fit === null || j.fit >= minFit)
       .filter((j) => {
@@ -149,7 +151,7 @@ export function JobsTable({
           a.dateFound + String(a.fit ?? -1).padStart(3, "0"),
         );
       });
-  }, [jobs, status, source, role, size, minFit, postedWithin, sortBy, q, mode]);
+  }, [jobs, status, source, role, resume, size, minFit, postedWithin, sortBy, q, mode]);
 
   function mutate(row: number, patch: Partial<Job>, updates: Record<string, string>) {
     const prev = jobs;
@@ -208,6 +210,12 @@ export function JobsTable({
                 value={role} onChange={(e) => setRole(e.target.value)}>
           <option value="all">role: all</option>
           {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <select className="panel cell-select px-2 py-1.5 text-xs"
+                title="Best-match master resume for the job (FDE / AIE / MLE / SDE)"
+                value={resume} onChange={(e) => setResume(e.target.value)}>
+          <option value="all">resume: all</option>
+          {RESUME_VARIANTS.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
         <select className="panel cell-select px-2 py-1.5 text-xs"
                 title="Company size (best-effort, by company name)"

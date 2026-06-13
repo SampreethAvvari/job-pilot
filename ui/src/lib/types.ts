@@ -10,6 +10,8 @@ export const HEADERS = [
 ] as const;
 
 export const ROLES = ["FDE", "AIE", "MLE", "DE", "DS", "SWE", "Other"] as const;
+// The four master resumes a job can be matched to (scorer's resume_variant).
+export const RESUME_VARIANTS = ["FDE", "AIE", "MLE", "SDE"] as const;
 
 // 0-based column index -> A1 letters (0->A, 25->Z, 26->AA).
 export function colLetter(idx: number): string {
