@@ -15,13 +15,21 @@ type Msg = {
 const FILE_TYPES = "image/png,image/jpeg,image/webp,application/pdf";
 const MAX_FILE_MB = 10;
 
-export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
+export function AssistantChat({
+  initialJobId,
+  lockedJob,
+}: {
+  initialJobId?: string;
+  lockedJob?: Job; // per-job drawer: context fixed, selector/paste hidden
+}) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [model, setModel] = useState<"flash" | "pro">("flash");
   const [busy, setBusy] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [jobId, setJobId] = useState(initialJobId ?? "");
+  const [jobId, setJobId] = useState(lockedJob?.id ?? initialJobId ?? "");
+  const [jobJd, setJobJd] = useState("");
+  const [jdNote, setJdNote] = useState("");
   const [showPaste, setShowPaste] = useState(false);
   const [paste, setPaste] = useState({ company: "", title: "", url: "", jd: "" });
   const [generating, setGenerating] = useState(false);
@@ -30,15 +38,36 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (lockedJob) return; // selector not shown when the job is fixed
     fetch("/api/jobs").then((r) => r.json())
       .then((d) => d.jobs && setJobs(d.jobs as Job[])).catch(() => {});
-  }, []);
+  }, [lockedJob]);
+
+  // Resolve the best JD (stored, else live-fetched from the posting) per job.
+  useEffect(() => {
+    if (!jobId) { setJobJd(""); setJdNote(""); return; }
+    let live = true;
+    setJdNote("loading job description…");
+    fetch(`/api/assistant/jd?jobId=${encodeURIComponent(jobId)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!live) return;
+        setJobJd(d.jd ?? "");
+        setJdNote(
+          d.source === "fetched" ? "loaded full job description from the posting link"
+            : d.source === "stored" ? "using the saved job description"
+            : "no job description found — paste it or attach a screenshot below",
+        );
+      })
+      .catch(() => live && setJdNote("could not load the job description"));
+    return () => { live = false; };
+  }, [jobId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const job = jobs.find((j) => j.id === jobId);
+  const job = lockedJob ?? jobs.find((j) => j.id === jobId);
   const pasteReady = paste.company.trim() && paste.title.trim() && paste.jd.trim().length >= 100;
 
   function push(m: Msg) {
@@ -87,6 +116,7 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
           })),
           model,
           jobId: jobId || undefined,
+          jobJd: jobJd || undefined,
         }),
       });
       const d = await res.json();
@@ -172,18 +202,26 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="panel flex flex-wrap items-center gap-2 p-3 text-xs">
-        <span style={{ color: "var(--text-dim)" }}>Job context:</span>
-        <select className="panel cell-select px-2 py-1.5 text-xs" value={jobId}
-                onChange={(e) => setJobId(e.target.value)}>
-          <option value="">none (or paste below)</option>
-          {jobs.map((j) => (
-            <option key={j.id} value={j.id}>{j.company} — {j.title}</option>
-          ))}
-        </select>
-        <button className="btn-ghost px-2 py-1 text-xs"
-                onClick={() => setShowPaste((s) => !s)}>
-          {showPaste ? "hide" : "+ paste an untracked job"}
-        </button>
+        {lockedJob ? (
+          <span style={{ color: "var(--text-dim)" }}>
+            Job: <b style={{ color: "var(--text)" }}>{lockedJob.company}</b> — {lockedJob.title}
+          </span>
+        ) : (
+          <>
+            <span style={{ color: "var(--text-dim)" }}>Job context:</span>
+            <select className="panel cell-select px-2 py-1.5 text-xs" value={jobId}
+                    onChange={(e) => setJobId(e.target.value)}>
+              <option value="">none (or paste below)</option>
+              {jobs.map((j) => (
+                <option key={j.id} value={j.id}>{j.company} — {j.title}</option>
+              ))}
+            </select>
+            <button className="btn-ghost px-2 py-1 text-xs"
+                    onClick={() => setShowPaste((s) => !s)}>
+              {showPaste ? "hide" : "+ paste an untracked job"}
+            </button>
+          </>
+        )}
         <span className="ml-auto flex items-center gap-1">
           {messages.length > 0 && (
             <button className="btn-ghost px-2 py-1 text-xs" onClick={clearChat}
@@ -206,6 +244,12 @@ export function AssistantChat({ initialJobId }: { initialJobId?: string }) {
           ))}
         </span>
       </div>
+
+      {jobId && jdNote && (
+        <span className="px-1 text-[11px]" style={{ color: "var(--text-faint)" }}>
+          {jdNote}
+        </span>
+      )}
 
       {showPaste && (
         <div className="panel flex flex-col gap-2 p-3">

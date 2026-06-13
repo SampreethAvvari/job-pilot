@@ -8,6 +8,7 @@ import { isApplied } from "@/lib/status-sets";
 import type { Job } from "@/lib/types";
 import { RESUME_VARIANTS, ROLES, STATUSES } from "@/lib/types";
 import { liveAge } from "@/lib/company-match";
+import { AssistantDrawer } from "@/components/assistant-drawer";
 import { AtsBadge } from "@/components/ats-report";
 import { FitMeter } from "@/components/status";
 
@@ -54,6 +55,7 @@ export function JobsTable({
   const [confirmJob, setConfirmJob] = useState<Job | null>(null);
   const [tailoring, setTailoring] = useState<Set<number>>(new Set());
   const [drafting, setDrafting] = useState<Set<number>>(new Set());
+  const [chatJob, setChatJob] = useState<Job | null>(null);
 
   function runJobAction(
     job: Job,
@@ -378,12 +380,12 @@ export function JobsTable({
                       ✉ Draft
                     </button>
                   )}
-                  <a href={`/assistant?job=${j.id}`}
-                     className="mt-0.5 block text-[11px] hover:underline"
-                     style={{ color: "var(--text-faint)" }}
-                     title="Chat about this job: application answers, resume tweaks, cover letter">
+                  <button onClick={() => setChatJob(j)}
+                          className="mt-0.5 block text-[11px] hover:underline"
+                          style={{ color: "var(--text-faint)" }}
+                          title="Chat about this job in a side panel: application answers, resume tweaks, cover letter">
                     💬 Ask
-                  </a>
+                  </button>
                 </td>
                 {mode === "applied" && (
                   <td className="whitespace-nowrap" style={{ color: "var(--text-dim)" }}>
@@ -490,6 +492,9 @@ export function JobsTable({
           </div>
         </div>,
         document.body,
+      )}
+      {chatJob && (
+        <AssistantDrawer key={chatJob.id} job={chatJob} onClose={() => setChatJob(null)} />
       )}
     </div>
   );

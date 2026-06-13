@@ -46,10 +46,11 @@ function dashy(text: string): boolean {
 
 export async function POST(request: Request) {
   try {
-    const { messages, model, jobId } = (await request.json()) as {
+    const { messages, model, jobId, jobJd } = (await request.json()) as {
       messages: ChatMessage[];
       model?: "flash" | "pro";
       jobId?: string;
+      jobJd?: string; // full JD resolved client-side via /api/assistant/jd (no refetch per message)
     };
     if (!Array.isArray(messages) || messages.length === 0) {
       return Response.json({ error: "messages required" }, { status: 400 });
@@ -71,7 +72,8 @@ export async function POST(request: Request) {
           `\n\nJOB CONTEXT (the job under discussion):\n` +
           `Company: ${job.company}\nTitle: ${job.title}\nLocation: ${job.location}\n` +
           `Posted: ${job.posted}\nURL: ${job.url}\nFit score: ${job.fit ?? "n/a"}\n` +
-          `JD keywords: ${job.jdKeywords}`;
+          `JD keywords: ${job.jdKeywords}` +
+          (jobJd ? `\n\nFULL JOB DESCRIPTION:\n${String(jobJd).slice(0, 6000)}` : "");
       }
     }
     const system = `${SYSTEM}\n\nCANDIDATE KNOWLEDGE:\n${pack}${jobContext}`;

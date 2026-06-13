@@ -65,6 +65,17 @@ export async function appendJob(j: {
   });
 }
 
+/** The stored JD excerpt for one job (kept out of the global Job payload —
+ * it can be 5k chars × hundreds of rows). */
+export async function readJdExcerpt(row: number): Promise<string> {
+  const col = colLetter((HEADERS as readonly string[]).indexOf("JD excerpt"));
+  const res = await sheetsClient().spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `Jobs!${col}${row}`,
+  });
+  return (res.data.values?.[0]?.[0] as string) ?? "";
+}
+
 export async function updateRow(row: number, updates: Record<string, string>) {
   const data = Object.entries(updates).map(([header, value]) => {
     const idx = (HEADERS as readonly string[]).indexOf(header);
