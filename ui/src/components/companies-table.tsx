@@ -4,32 +4,13 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import type { Company } from "@/lib/types";
-import type { CompanyJobMeta } from "@/lib/company-match";
-
-function norm(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
+import { liveAge as age, norm, postedTs, type CompanyJobMeta } from "@/lib/company-match";
 
 function statusColor(status: string): string {
   if (status === "active") return "var(--green)";
   if (status.startsWith("error")) return "var(--red)";
   if (status === "unsupported") return "var(--text-faint)";
   return "var(--amber)"; // pending / blank: resolver picks it up next run
-}
-
-function postedTs(posted: string): number {
-  if (!posted) return 0;
-  const ts = Date.parse(posted.replace(" ", "T") + "Z");
-  return Number.isFinite(ts) ? ts : 0;
-}
-
-function age(posted: string): string {
-  const ts = postedTs(posted);
-  if (!ts) return "—";
-  const hours = Math.max(0, (Date.now() - ts) / 3600_000);
-  if (hours < 1) return `${Math.round(hours * 60)}m ago`;
-  if (hours < 24) return `${Math.round(hours)}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
 }
 
 const EMPTY: CompanyJobMeta = { remaining: 0, newest: "" };

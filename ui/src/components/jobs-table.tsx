@@ -7,6 +7,7 @@ import { companySize, SIZE_BUCKETS } from "@/lib/company-size";
 import { isApplied } from "@/lib/status-sets";
 import type { Job } from "@/lib/types";
 import { RESUME_VARIANTS, ROLES, STATUSES } from "@/lib/types";
+import { liveAge } from "@/lib/company-match";
 import { AtsBadge } from "@/components/ats-report";
 import { FitMeter } from "@/components/status";
 
@@ -299,7 +300,7 @@ export function JobsTable({
                 <td className="max-w-40 truncate" title={j.location}>{j.location}</td>
                 <td className="whitespace-nowrap" style={{ color: "var(--text-dim)" }}
                     title={j.posted || "posting date unknown"}>
-                  {j.postedAge}
+                  {j.posted ? liveAge(j.posted) : j.postedAge}
                 </td>
                 <td style={{ color: "var(--text-dim)" }}>{j.source}</td>
                 <td>

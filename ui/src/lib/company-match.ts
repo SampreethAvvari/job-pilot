@@ -1,5 +1,23 @@
 import type { Company, Job } from "./types";
 
+/** Parse a "YYYY-MM-DD HH:MM" (UTC) posted stamp to epoch ms; 0 if unknown. */
+export function postedTs(posted: string): number {
+  if (!posted) return 0;
+  const ts = Date.parse(posted.replace(" ", "T") + "Z");
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+/** Age computed LIVE from the real posted timestamp — never the frozen
+ * "Posted age" column, which goes stale the moment a row is written. */
+export function liveAge(posted: string): string {
+  const ts = postedTs(posted);
+  if (!ts) return "—";
+  const hours = Math.max(0, (Date.now() - ts) / 3600_000);
+  if (hours < 1) return `${Math.round(hours * 60)}m ago`;
+  if (hours < 24) return `${Math.round(hours)}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 /** Job rows store company names as boards report them ("nvidia" tenant,
  * "Acme Corp" display name); the watchlist holds display names ("Nvidia").
  * Normalize both and also accept the board slug's first segment. */
