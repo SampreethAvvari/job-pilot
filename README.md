@@ -53,6 +53,17 @@ It never sends anything on its own. You stay the pilot; it does the paperwork.
    tab · resume armory · reply feed · ✨tailor & ✉draft buttons per job
 ```
 
+## The copilot
+
+Every job row has a **💬** that opens its own chat drawer, grounded in a knowledge
+pack (your GitHub, portfolio, resumes, and profile) plus the job's description
+fetched live when you open it, so answers are specific to *that* role and *your*
+background. Attach a PDF or image (a JD screenshot, a recruiter's note) straight
+into the conversation; nothing is persisted client-side. The same guardrailed
+Vertex chat powers a manual-job tailor flow for the role a friend forwards that no
+board ever surfaced. A `us_only` location wall runs upstream in the pipeline too,
+so non-US postings never reach the Sheet in the first place.
+
 ## Tech stack, and why each piece
 
 | Layer | Choice | Why |
@@ -63,6 +74,7 @@ It never sends anything on its own. You stay the pilot; it does the paperwork.
 | Resume engine | **LaTeX + pdflatex + `cmap`** | The only reliably ATS-parseable PDF text layer we found (XeTeX output splits words like "New Y ork" in parsers) |
 | Resume judge | **Calibrated ResumeWorded-replica** (`src/jobpilot/judge.py`) | ~40 deterministic checks weighted impact 35 / brevity 20 / style 15 / sections 15 / soft-skills 15; every resume (master or tailored) goes through a judge-guided rewrite loop — up to 10 attempts, best wins, improvements only — and ships with its full ATS report in the console |
 | Console | **Next.js 16** (App Router) on Cloud Run + **IAP** | Zero-auth-code private app: Google sign-in and allowlisting handled entirely by infrastructure |
+| Copilot | **Guardrailed Vertex chat** | Per-job drawer grounded in a knowledge pack + the live JD; PDF/image attachments; model keys stay server-side |
 | Identity | **User OAuth refresh token** in Secret Manager | The pipeline acts as *you* — your Sheet, your Gmail drafts, your Drive — with four narrow scopes (see FORK-SETUP) |
 | Personal data | **Env/Secret-Manager overrides** | Profile and resumes load from `JOBPILOT_PROFILE_YAML` / `RESUME_TEX_*` env; the repo ships Jane Doe templates only |
 | CI/CD | **GitHub Actions + Workload Identity Federation** | Push to master → path-filtered deploys, no stored cloud keys anywhere; lint+tests run secret-free on every PR |
