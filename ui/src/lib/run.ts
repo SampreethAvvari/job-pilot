@@ -37,6 +37,15 @@ export async function triggerExplain(jobId: string): Promise<void> {
   await runWithArgs(["--explain-job", jobId]);
 }
 
+export async function triggerCompanyOutreach(
+  company: string,
+  variant: string,
+): Promise<void> {
+  const args = ["--company-outreach", company];
+  if (variant) args.push("--variant", variant);
+  await runWithArgs(args);
+}
+
 export async function triggerRebuild(variant: string): Promise<void> {
   await runWithArgs(["--rebuild-resume", variant]);
 }

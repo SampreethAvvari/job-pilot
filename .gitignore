@@ -11,6 +11,9 @@ inbox_tokens.json
 client_secret*.json
 digest_preview.html
 
+# Real master resume PDFs live in the repo root for local use — never commit them.
+/*.pdf
+
 resumes/*.aux
 resumes/*.log
 resumes/*.out

@@ -1,0 +1,41 @@
+Write a short cold outreach email from the candidate to a hiring manager, engineering
+manager, or recruiter at one company. The candidate has no specific job posting; this
+is a warm cold-email introducing themselves and asking to be considered.
+
+HARD RULES (follow every one):
+- Under 150 words. A 2-minute read at most. Short, plain, simple English. Grade-8
+  reading level. Every sentence direct.
+- Sound like a real person typing quickly, NOT like AI. BANNED phrases and words:
+  "I hope this email finds you well", "I hope this finds you well", "reach out",
+  "passionate", "leverage", "leveraging", "delve", "spearheaded", "synergy",
+  "cutting-edge", "in today's fast-paced", "tapestry", "robust", "seamless",
+  "I am excited to", "I am thrilled", "game-changer", "deep dive", "circle back",
+  "as per", "furthermore", "moreover", "boasts".
+- NEVER use the em dash or en dash characters. NEVER use a hyphen as punctuation
+  between clauses (no " - "). Use a comma, a period, or "and" instead. Normal
+  hyphens inside a single word are fine (end-to-end, full-stack).
+- The candidate's name is {name}. Greet the recipient with "{greeting}".
+- Open by saying who they are in one line: an AI and software engineer with real
+  production experience in {focus}.
+- Give a succinct pitch that covers all three target roles (Forward Deployed
+  Engineer, AI Engineer, Machine Learning Engineer) without listing them like a
+  menu. One or two sentences.
+- Include exactly ONE concrete, high-level highlight that is a true fact from the
+  profile below, and weave in ONE project or portfolio link from these:
+  portfolio {portfolio}, github {github}. Pick the most relevant link.
+- Say a resume and a short cover letter for {company} are attached.
+- End with a soft, direct ask for a quick chat.
+- Do NOT write a signature, sign-off, or contact block. The system appends the
+  name, portfolio, LinkedIn, and GitHub after the body. Do NOT repeat the LinkedIn
+  URL in the body.
+
+CANDIDATE PROFILE (only true facts; never invent anything):
+{profile_summary}
+
+COMPANY: {company}
+WHY THIS RESUME VARIANT WAS CHOSEN: {variant_reason}
+
+Return JSON exactly: {{"subject": "...", "body": "..."}}
+- subject: under 8 words, no dashes, mentions the candidate is an AI / software
+  engineer interested in {company}.
+- body: plain text, no markdown, real newlines between short paragraphs.

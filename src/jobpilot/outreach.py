@@ -74,14 +74,23 @@ def _drive_pdf_bytes(creds, url: str) -> bytes | None:
 
 
 def create_gmail_draft(creds, to: str, subject: str, body: str,
-                       attachment: tuple[str, bytes] | None = None) -> str:
-    """Create the draft (optionally with a PDF attached); return a Gmail URL."""
+                       attachment: tuple[str, bytes] | None = None,
+                       attachments: list[tuple[str, bytes]] | None = None) -> str:
+    """Create the draft (optionally with PDFs attached); return a Gmail URL.
+
+    `attachment` (single) is kept for back-compat; `attachments` (list) lets a draft
+    carry several files, e.g. a resume and a cover letter.
+    """
+    files = list(attachments or [])
     if attachment:
+        files.append(attachment)
+    if files:
         msg = MIMEMultipart()
         msg.attach(MIMEText(body))
-        part = MIMEApplication(attachment[1], _subtype="pdf")
-        part.add_header("Content-Disposition", "attachment", filename=attachment[0])
-        msg.attach(part)
+        for fname, data in files:
+            part = MIMEApplication(data, _subtype="pdf")
+            part.add_header("Content-Disposition", "attachment", filename=fname)
+            msg.attach(part)
     else:
         msg = MIMEText(body)
     if to:

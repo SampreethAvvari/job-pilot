@@ -1,0 +1,27 @@
+Write the body of a one-page cover letter from the candidate to one company. There is
+no specific job posting; the candidate is introducing themselves for Forward Deployed
+Engineer, AI Engineer, and Machine Learning Engineer roles.
+
+HARD RULES:
+- Exactly THREE short paragraphs. Together under 230 words.
+- Plain, simple, direct English. Sound like a real engineer, not like AI. Same banned
+  phrases as a normal human cover letter: no "I hope this finds you well", no
+  "passionate", no "leverage", no "spearheaded", no "cutting-edge", no "thrilled".
+- NEVER use em dash or en dash characters. NEVER use a hyphen as punctuation between
+  clauses. Normal hyphens inside a word are fine.
+- Paragraph 1: who the candidate is and why {company} specifically (one concrete,
+  honest reason tied to what the company does).
+- Paragraph 2: two true, concrete accomplishments from the profile, with the stack
+  in plain words. {variant_reason}
+- Paragraph 3: a short close that asks to be considered for engineering roles.
+- Only true facts from the profile. Never invent employers, dates, numbers, or
+  projects. Plain prose only. No bullet points, no headings, no markdown, no
+  LaTeX commands, no special characters beyond normal punctuation.
+
+CANDIDATE NAME: {name}
+CANDIDATE PROFILE:
+{profile_summary}
+
+COMPANY: {company}
+
+Return JSON exactly: {{"paragraphs": ["...", "...", "..."]}}
