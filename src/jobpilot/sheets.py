@@ -321,6 +321,54 @@ def update_company_rows(creds, spreadsheet_id: str,
     ).execute()
 
 
+OUTREACH_HEADERS = [
+    "Searched at", "Company", "Domain", "Resume variant", "Variant reason",
+    "Subject", "Guessed emails", "Draft", "Resume", "Cover letter", "Status", "Notes",
+]
+
+
+def ensure_outreach_tab(creds, spreadsheet_id: str) -> None:
+    svc = _svc(creds)
+    meta = svc.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    titles = [s["properties"]["title"] for s in meta["sheets"]]
+    if "Outreach" in titles:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": "Outreach"}}}]},
+    ).execute()
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="Outreach!A1", valueInputOption="RAW",
+        body={"values": [OUTREACH_HEADERS]},
+    ).execute()
+
+
+def append_outreach_row(creds, spreadsheet_id: str, row: list) -> None:
+    ensure_outreach_tab(creds, spreadsheet_id)
+    _svc(creds).spreadsheets().values().append(
+        spreadsheetId=spreadsheet_id, range="Outreach!A1",
+        valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS",
+        body={"values": [row]},
+    ).execute()
+
+
+def read_outreach(creds, spreadsheet_id: str) -> list[dict]:
+    """Outreach tab rows as dicts keyed by header, with 1-based row numbers."""
+    ensure_outreach_tab(creds, spreadsheet_id)
+    resp = (
+        _svc(creds)
+        .spreadsheets()
+        .values()
+        .get(spreadsheetId=spreadsheet_id, range="Outreach!A2:L")
+        .execute()
+    )
+    rows = []
+    for i, values in enumerate(resp.get("values", []), start=2):
+        padded = values + [""] * (len(OUTREACH_HEADERS) - len(values))
+        rows.append({"_row": i, **dict(zip(OUTREACH_HEADERS, padded))})
+    return rows
+
+
 KNOWLEDGE_HEADERS = ["Source", "Updated", "Content"]
 EXTRAS_HINT = ("Edit this row freely — facts the auto sources miss "
                "(LinkedIn highlights, awards, talks). Refresh never touches it.")

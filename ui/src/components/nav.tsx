@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/resumes", label: "Resumes", glyph: "❑" },
   { href: "/replies", label: "Replies", glyph: "⮌" },
   { href: "/companies", label: "Companies", glyph: "▦" },
+  { href: "/outreach", label: "Outreach", glyph: "✉" },
   { href: "/assistant", label: "Assistant", glyph: "✦" },
 ];
 

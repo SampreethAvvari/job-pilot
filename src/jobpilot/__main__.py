@@ -17,6 +17,10 @@ def main() -> None:
     parser.add_argument("--explain-job", default="",
                         help="rebuild the tailoring transparency report for one Job ID")
     parser.add_argument("--outreach-job", default="", help="draft outreach for one Job ID")
+    parser.add_argument("--company-outreach", default="",
+                        help="draft a company-wide cold-email (by company name)")
+    parser.add_argument("--variant", default="",
+                        help="force a resume variant for --company-outreach (AIE/FDE/MLE/SDE)")
     parser.add_argument("--fast", action="store_true",
                         help="fetch+score+record only (console refresh)")
     parser.add_argument("--inbox-watch", action="store_true",
@@ -70,6 +74,24 @@ def main() -> None:
         sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
         print(rebuild_master(creds, sid, args.rebuild_resume.upper(), cfg,
                              make_tailor_llm(cfg), datetime.now(timezone.utc)))
+        return
+
+    if args.company_outreach:
+        import os
+        from datetime import datetime, timezone
+
+        import httpx
+
+        from jobpilot import company_outreach
+        from jobpilot.gauth import credentials
+        from jobpilot.tailor import make_tailor_llm
+
+        creds = credentials()
+        sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
+        print(company_outreach.run(
+            creds, sid, args.company_outreach, args.variant, cfg,
+            make_tailor_llm(cfg), httpx.Client(timeout=30),
+            datetime.now(timezone.utc)))
         return
 
     if args.tailor_job or args.outreach_job or args.explain_job:

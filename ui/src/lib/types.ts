@@ -61,6 +61,23 @@ export type Job = {
   resumeAts: string;
 };
 
+// Outreach tab (columns A-L — keep in sync with sheets.py OUTREACH_HEADERS)
+export type Outreach = {
+  row: number;
+  searchedAt: string;
+  company: string;
+  domain: string;
+  variant: string;
+  variantReason: string;
+  subject: string;
+  guessedEmails: string;
+  draft: string;
+  resume: string; // master resume Drive file id for the chosen variant
+  coverLetter: string; // "yes" | "no"
+  status: string;
+  notes: string;
+};
+
 // Companies watchlist tab (columns A-H — keep in sync with sheets.py COMPANIES_HEADERS)
 export type Company = {
   row: number;
