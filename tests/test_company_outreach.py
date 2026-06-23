@@ -167,6 +167,51 @@ def test_run_blank_to_for_low_confidence_hunter(monkeypatch):
     assert captured["to"] == ""  # below CONF_TO -> left blank for manual verify
 
 
+def test_auto_company_outreach_selects_fresh_real_companies(monkeypatch):
+    cfg = make_cfg()
+    calls = []
+    rows = [
+        {"Company": "Stripe", "Source": "greenhouse", "Fit": "85", "Status": "New",
+         "Resume variant": "SDE", "Role": "SWE", "Posted": "2026-06-20 10:00"},
+        {"Company": "Stripe", "Source": "greenhouse", "Fit": "70", "Status": "New",
+         "Resume variant": "AIE", "Role": "AIE", "Posted": "2026-06-21 10:00"},  # dup
+        {"Company": "RepostCo", "Source": "remoteok", "Fit": "90", "Status": "New",
+         "Resume variant": "AIE", "Role": "AIE", "Posted": "2026-06-22"},  # aggregator
+        {"Company": "LowFit", "Source": "lever", "Fit": "40", "Status": "New",
+         "Resume variant": "SDE", "Role": "SWE", "Posted": "2026-06-22"},  # below min
+        {"Company": "Notion", "Source": "ashby", "Fit": "75", "Status": "New",
+         "Resume variant": "FDE", "Role": "FDE", "Posted": "2026-06-23 09:00"},
+        {"Company": "DoneCo", "Source": "greenhouse", "Fit": "80", "Status": "New",
+         "Resume variant": "MLE", "Role": "MLE", "Posted": "2026-06-23"},  # already done
+        {"Company": "Dissed", "Source": "lever", "Fit": "95", "Status": "Dismissed",
+         "Resume variant": "SDE", "Role": "SWE", "Posted": "2026-06-23"},  # dismissed
+    ]
+    monkeypatch.setattr(co.sheets, "read_rows", lambda creds, sid: rows)
+    monkeypatch.setattr(co.sheets, "read_outreach",
+                        lambda creds, sid: [{"Company": "DoneCo"}])
+    monkeypatch.setattr(co, "run",
+                        lambda creds, sid, company, variant, cfg, llm, client, now,
+                        reason="": calls.append((company, variant)) or f"drafted {company}")
+
+    co.auto_company_outreach(None, "sid", cfg, lambda p: "{}", httpx.Client(), NOW)
+    picked = dict(calls)
+    assert set(picked) == {"Stripe", "Notion"}  # real, fresh, deduped, above fit
+    assert picked["Stripe"] == "SDE"  # variant from the higher-fit Stripe row
+
+
+def test_auto_company_outreach_respects_limit(monkeypatch):
+    cfg = make_cfg()
+    calls = []
+    rows = [{"Company": f"C{i}", "Source": "greenhouse", "Fit": "80", "Status": "New",
+             "Resume variant": "AIE", "Role": "AIE", "Posted": f"2026-06-{10 + i:02d}"}
+            for i in range(8)]
+    monkeypatch.setattr(co.sheets, "read_rows", lambda creds, sid: rows)
+    monkeypatch.setattr(co.sheets, "read_outreach", lambda creds, sid: [])
+    monkeypatch.setattr(co, "run", lambda *a, **k: calls.append(a[2]) or "ok")
+    co.auto_company_outreach(None, "sid", cfg, lambda p: "{}", httpx.Client(), NOW, limit=3)
+    assert len(calls) == 3
+
+
 def test_hunter_skipped_without_key(monkeypatch):
     from jobpilot import hunter
     monkeypatch.delenv("HUNTER_API_KEY", raising=False)

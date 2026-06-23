@@ -1,5 +1,9 @@
 import { readOutreach } from "@/lib/outreach";
-import { latestRun, triggerCompanyOutreach } from "@/lib/run";
+import {
+  latestRun,
+  triggerAutoCompanyOutreach,
+  triggerCompanyOutreach,
+} from "@/lib/run";
 
 const VARIANTS = ["AIE", "FDE", "MLE", "SDE"];
 
@@ -16,18 +20,28 @@ export async function GET() {
   }
 }
 
-// POST { company, variant? }: trigger a company outreach draft run.
+// POST { company, variant? } to draft one; or { batch: N } to batch-draft the
+// freshest N real-hiring companies from the Jobs tab.
 export async function POST(request: Request) {
   try {
-    const { company, variant } = (await request.json()) as {
+    const body = (await request.json()) as {
       company?: string;
       variant?: string;
+      batch?: number;
     };
-    const name = (company ?? "").trim();
+    if (body.batch != null) {
+      const n = Math.floor(body.batch);
+      if (!Number.isFinite(n) || n < 1 || n > 50) {
+        return Response.json({ error: "batch must be 1-50" }, { status: 400 });
+      }
+      await triggerAutoCompanyOutreach(n);
+      return Response.json({ ok: true });
+    }
+    const name = (body.company ?? "").trim();
     if (!name || name.length > 80) {
       return Response.json({ error: "valid company name required" }, { status: 400 });
     }
-    const v = (variant ?? "").toUpperCase();
+    const v = (body.variant ?? "").toUpperCase();
     if (v && !VARIANTS.includes(v)) {
       return Response.json({ error: "invalid variant" }, { status: 400 });
     }

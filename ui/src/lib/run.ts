@@ -46,6 +46,10 @@ export async function triggerCompanyOutreach(
   await runWithArgs(args);
 }
 
+export async function triggerAutoCompanyOutreach(count: number): Promise<void> {
+  await runWithArgs(["--auto-company-outreach", String(count)]);
+}
+
 export async function triggerRebuild(variant: string): Promise<void> {
   await runWithArgs(["--rebuild-resume", variant]);
 }

@@ -51,6 +51,13 @@ TARGET_ROLES = [
 ]
 GENERIC_INBOXES = ["careers", "recruiting", "talent", "jobs"]
 
+# "Real hiring companies, not reposts": companies posting on their own ATS, as
+# opposed to aggregators (RemoteOK/HN/Adzuna/LinkedIn) full of reposts + agencies.
+DIRECT_BOARDS = {
+    "greenhouse", "lever", "ashby", "workday", "smartrecruiters",
+    "workable", "recruitee",
+}
+
 
 # --------------------------------------------------------------------------- #
 # Text hygiene
@@ -246,14 +253,15 @@ def _slug(name: str) -> str:
 # Orchestration
 # --------------------------------------------------------------------------- #
 def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
-        llm: Callable[[str], str], client: httpx.Client, now: datetime) -> str:
+        llm: Callable[[str], str], client: httpx.Client, now: datetime,
+        reason: str = "") -> str:
     """Draft one pooled cold email for a company; record it on the Outreach tab."""
     company = company.strip()
     if not company:
         return "company outreach skipped: empty company name"
     try:
         if variant and variant.upper() in VARIANTS:
-            variant, reason = variant.upper(), "Manually selected."
+            variant, reason = variant.upper(), (reason or "Manually selected.")
         else:
             variant, reason = pick_variant(company, llm)
 
@@ -318,3 +326,57 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
                 + (f" | {'; '.join(notes)}" if notes else ""))
     except Exception as exc:  # noqa: BLE001 — one failure must not crash the job
         return f"company outreach FAILED for {company}: {type(exc).__name__}: {exc}"
+
+
+def _recency(row: dict) -> str:
+    return row.get("Posted") or row.get("Date found") or ""
+
+
+def auto_company_outreach(creds, spreadsheet_id: str, cfg: Config,
+                          llm: Callable[[str], str], client: httpx.Client,
+                          now: datetime, limit: int = 30, min_fit: int = 60) -> list[str]:
+    """Batch-draft outreach for the freshest real-hiring companies on the Jobs tab.
+
+    Selects direct-board (own-ATS) postings only, drops aggregator reposts, requires
+    a decent fit, dedupes to one draft per company, skips companies already drafted,
+    and uses each job's recommended resume variant so the pitch matches the field.
+    One Hunter credit per company; capped at `limit`.
+    """
+    rows = sheets.read_rows(creds, spreadsheet_id)
+    done = {
+        (r.get("Company") or "").strip().lower()
+        for r in sheets.read_outreach(creds, spreadsheet_id)
+        if r.get("Company")
+    }
+    best: dict[str, dict] = {}
+    for r in rows:
+        company = (r.get("Company") or "").strip()
+        if not company or company.lower() in done:
+            continue
+        if r.get("Source") not in DIRECT_BOARDS:
+            continue  # aggregators carry reposts/agencies — skip
+        if r.get("Status") in ("Rejected", "Dismissed"):
+            continue
+        fit = int(r["Fit"]) if str(r.get("Fit", "")).isdigit() else 0
+        if fit < min_fit:
+            continue
+        key = company.lower()
+        prev = best.get(key)
+        if prev is None or (fit, _recency(r)) > (prev["_fit"], _recency(prev)):
+            best[key] = {**r, "_fit": fit}
+
+    chosen = sorted(best.values(), key=lambda r: (_recency(r), r["_fit"]),
+                    reverse=True)[:limit]
+    if not chosen:
+        return [f"auto outreach: no fresh direct-board companies with fit >= {min_fit}"]
+
+    notes = [f"auto outreach: drafting {len(chosen)} fresh companies (cap {limit})"]
+    for r in chosen:
+        company = r["Company"].strip()
+        variant = (r.get("Resume variant") or "").upper()
+        role = r.get("Role") or variant or "engineering"
+        reason = (f"You have a fresh {role} opening; this is the strongest match of "
+                  f"my four resumes for {company}.")
+        notes.append(run(creds, spreadsheet_id, company, variant, cfg, llm, client,
+                         now, reason=reason))
+    return notes
