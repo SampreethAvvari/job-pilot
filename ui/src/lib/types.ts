@@ -61,7 +61,7 @@ export type Job = {
   resumeAts: string;
 };
 
-// Outreach tab (columns A-L — keep in sync with sheets.py OUTREACH_HEADERS)
+// Outreach tab (columns A-M — keep in sync with sheets.py OUTREACH_HEADERS)
 export type Outreach = {
   row: number;
   searchedAt: string;
@@ -76,6 +76,7 @@ export type Outreach = {
   coverLetter: string; // "yes" | "no"
   status: string;
   notes: string;
+  peopleFound: string; // Hunter contacts: "Name (role) <email> 95%; ..."
 };
 
 // Companies watchlist tab (columns A-H — keep in sync with sheets.py COMPANIES_HEADERS)

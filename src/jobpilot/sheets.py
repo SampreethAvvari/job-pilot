@@ -324,6 +324,7 @@ def update_company_rows(creds, spreadsheet_id: str,
 OUTREACH_HEADERS = [
     "Searched at", "Company", "Domain", "Resume variant", "Variant reason",
     "Subject", "Guessed emails", "Draft", "Resume", "Cover letter", "Status", "Notes",
+    "People found",
 ]
 
 
@@ -359,7 +360,7 @@ def read_outreach(creds, spreadsheet_id: str) -> list[dict]:
         _svc(creds)
         .spreadsheets()
         .values()
-        .get(spreadsheetId=spreadsheet_id, range="Outreach!A2:L")
+        .get(spreadsheetId=spreadsheet_id, range="Outreach!A2:M")
         .execute()
     )
     rows = []

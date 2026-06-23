@@ -17,7 +17,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from jobpilot import sheets
+from jobpilot import hunter, sheets
 from jobpilot.config import Config
 from jobpilot.outreach import (
     Draft,
@@ -31,6 +31,7 @@ COVER_PROMPT = Path(__file__).parent / "prompts" / "cover_letter_company_v1.txt"
 
 SUBJECT_TAG = "JobPilot"  # subject prefix groups drafts by company in Gmail search
 FOCUS = "AI engineering and software development"
+CONF_TO = 70  # only auto-address the draft to a Hunter email at/above this confidence
 
 VARIANTS = ("AIE", "FDE", "MLE", "SDE")
 VARIANT_FRAMING = {
@@ -260,7 +261,17 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
         inboxes = guessed_inboxes(domain)
         links = find_people_links(company)
 
-        draft = draft_company_email(company, reason, "", cfg, llm)
+        # Reliable emails via Hunter (free tier); ('', []) when no key or no hit.
+        _pattern, contacts = hunter.find_contacts(company, domain, client)
+        primary = contacts[0] if contacts else None
+        to = primary["email"] if primary and primary["confidence"] >= CONF_TO else ""
+        contact_name = primary["name"] if primary else ""
+        people_found = "; ".join(
+            f"{c['name'] or '?'} ({c['position'] or c['department'] or 'n/a'}) "
+            f"<{c['email']}> {c['confidence']}%" for c in contacts[:6]
+        )
+
+        draft = draft_company_email(company, reason, contact_name, cfg, llm)
         body = (f"{strip_closing(draft.body, cfg.profile.name)}\n\n"
                 f"{signature(cfg.profile)}\n")
         subject = f"[{SUBJECT_TAG} · {company}] {draft.subject}"
@@ -279,9 +290,13 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
         else:
             notes.append("cover letter not generated (pdflatex/LLM unavailable)")
 
-        # To is left blank on purpose: the user finds the real recipient and fills it.
-        draft_url = create_gmail_draft(creds, "", subject, body,
+        # `to` is the best confident Hunter email, else blank for the user to fill.
+        draft_url = create_gmail_draft(creds, to, subject, body,
                                        attachments=attachments)
+        if not contacts:
+            notes.append("no Hunter contacts (set HUNTER_API_KEY or find manually)")
+        elif not to:
+            notes.append("contacts found but low confidence — verify before sending")
 
         sheets.append_outreach_row(creds, spreadsheet_id, [
             now.strftime("%Y-%m-%d %H:%M"),
@@ -296,8 +311,10 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
             "yes" if cover else "no",
             "Drafted",
             "; ".join(notes) + (" | find: " + " ".join(u for _, u in links[:3])),
+            people_found,
         ])
-        return (f"company outreach drafted: {company} ({variant}) "
-                f"-> Gmail draft created" + (f" | {'; '.join(notes)}" if notes else ""))
+        sent_to = f" -> {to}" if to else " (recipient blank, verify)"
+        return (f"company outreach drafted: {company} ({variant}){sent_to}"
+                + (f" | {'; '.join(notes)}" if notes else ""))
     except Exception as exc:  # noqa: BLE001 — one failure must not crash the job
         return f"company outreach FAILED for {company}: {type(exc).__name__}: {exc}"

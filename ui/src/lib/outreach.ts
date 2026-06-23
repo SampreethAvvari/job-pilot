@@ -7,7 +7,7 @@ export type { Outreach } from "./types";
 export async function readOutreach(): Promise<Outreach[]> {
   const res = await sheetsClient().spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Outreach!A2:L",
+    range: "Outreach!A2:M",
   });
   return (res.data.values ?? [])
     .map((v, i) => {
@@ -17,6 +17,7 @@ export async function readOutreach(): Promise<Outreach[]> {
         searchedAt: g(0), company: g(1), domain: g(2), variant: g(3),
         variantReason: g(4), subject: g(5), guessedEmails: g(6), draft: g(7),
         resume: g(8), coverLetter: g(9), status: g(10), notes: g(11),
+        peopleFound: g(12),
       };
     })
     .filter((o) => o.company)
