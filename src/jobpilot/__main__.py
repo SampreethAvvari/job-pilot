@@ -19,6 +19,8 @@ def main() -> None:
     parser.add_argument("--outreach-job", default="", help="draft outreach for one Job ID")
     parser.add_argument("--company-outreach", default="",
                         help="draft a company-wide cold-email (by company name)")
+    parser.add_argument("--auto-company-outreach", type=int, default=0,
+                        help="batch-draft outreach for up to N fresh hiring companies")
     parser.add_argument("--variant", default="",
                         help="force a resume variant for --company-outreach (AIE/FDE/MLE/SDE)")
     parser.add_argument("--fast", action="store_true",
@@ -76,7 +78,7 @@ def main() -> None:
                              make_tailor_llm(cfg), datetime.now(timezone.utc)))
         return
 
-    if args.company_outreach:
+    if args.company_outreach or args.auto_company_outreach:
         import os
         from datetime import datetime, timezone
 
@@ -88,10 +90,16 @@ def main() -> None:
 
         creds = credentials()
         sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
-        print(company_outreach.run(
-            creds, sid, args.company_outreach, args.variant, cfg,
-            make_tailor_llm(cfg), httpx.Client(timeout=30),
-            datetime.now(timezone.utc)))
+        llm = make_tailor_llm(cfg)
+        client = httpx.Client(timeout=60)
+        now = datetime.now(timezone.utc)
+        if args.auto_company_outreach:
+            for note in company_outreach.auto_company_outreach(
+                    creds, sid, cfg, llm, client, now, limit=args.auto_company_outreach):
+                print(note)
+        else:
+            print(company_outreach.run(
+                creds, sid, args.company_outreach, args.variant, cfg, llm, client, now))
         return
 
     if args.tailor_job or args.outreach_job or args.explain_job:
