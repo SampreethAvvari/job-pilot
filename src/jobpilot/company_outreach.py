@@ -274,6 +274,14 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
         primary = contacts[0] if contacts else None
         to = primary["email"] if primary and primary["confidence"] >= CONF_TO else ""
         contact_name = primary["name"] if primary else ""
+        verify_note = ""
+        if to:  # confirm deliverability of the one chosen recipient (0.5 credit)
+            result = (hunter.verify(to, client).get("result") or "").lower()
+            if result == "undeliverable":
+                verify_note = f"Hunter: {to} undeliverable, recipient left blank"
+                to = ""
+            elif result:
+                verify_note = f"verified {result}"
         people_found = "; ".join(
             f"{c['name'] or '?'} ({c['position'] or c['department'] or 'n/a'}) "
             f"<{c['email']}> {c['confidence']}%" for c in contacts[:6]
@@ -304,7 +312,9 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
         if not contacts:
             notes.append("no Hunter contacts (set HUNTER_API_KEY or find manually)")
         elif not to:
-            notes.append("contacts found but low confidence — verify before sending")
+            notes.append("contacts found but unverified/low confidence, verify first")
+        if verify_note:
+            notes.append(verify_note)
 
         sheets.append_outreach_row(creds, spreadsheet_id, [
             now.strftime("%Y-%m-%d %H:%M"),

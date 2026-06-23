@@ -86,3 +86,21 @@ def find_contacts(company: str, domain: str, client: httpx.Client,
     out.sort(key=lambda c: (c["score"], c["confidence"], bool(c["name"])),
              reverse=True)
     return pattern, out
+
+
+def verify(email: str, client: httpx.Client) -> dict:
+    """Email Verifier: {result: deliverable|risky|undeliverable, score, status}.
+
+    {} when no key / no email / error. Costs 0.5 credit per call.
+    """
+    key = os.environ.get("HUNTER_API_KEY")
+    if not key or not email:
+        return {}
+    try:
+        resp = client.get(f"{API}/email-verifier",
+                          params={"api_key": key, "email": email}, timeout=30)
+        if resp.status_code != 200:
+            return {}
+        return resp.json().get("data") or {}
+    except (httpx.HTTPError, ValueError):
+        return {}
