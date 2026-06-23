@@ -122,6 +122,8 @@ def test_run_addresses_draft_from_hunter_contact(monkeypatch):
         [{"name": "Riya Patel", "email": "riya.patel@acme.com", "position": "Recruiter",
           "department": "hr", "seniority": "senior", "confidence": 95, "score": 100}],
     ))
+    monkeypatch.setattr(co.hunter, "verify",
+                        lambda email, client: {"result": "deliverable", "score": 98})
     monkeypatch.setattr(co, "_master_pdf", lambda creds, cfg, variant: b"%PDF")
     monkeypatch.setattr(co, "cover_letter_pdf", lambda *a, **k: b"%PDF")
     monkeypatch.setattr(co.sheets, "append_outreach_row",
@@ -210,6 +212,42 @@ def test_auto_company_outreach_respects_limit(monkeypatch):
     monkeypatch.setattr(co, "run", lambda *a, **k: calls.append(a[2]) or "ok")
     co.auto_company_outreach(None, "sid", cfg, lambda p: "{}", httpx.Client(), NOW, limit=3)
     assert len(calls) == 3
+
+
+def test_run_blanks_undeliverable_recipient(monkeypatch):
+    cfg = make_cfg()
+    captured = {}
+    monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
+    monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: (
+        "", [{"name": "Sam Lee", "email": "sam@acme.com", "position": "Recruiter",
+              "department": "hr", "seniority": "senior", "confidence": 92, "score": 100}],
+    ))
+    monkeypatch.setattr(co.hunter, "verify",
+                        lambda email, client: {"result": "undeliverable", "score": 10})
+    monkeypatch.setattr(co, "_master_pdf", lambda *a, **k: None)
+    monkeypatch.setattr(co, "cover_letter_pdf", lambda *a, **k: None)
+    monkeypatch.setattr(co.sheets, "append_outreach_row", lambda creds, sid, row: None)
+    monkeypatch.setattr(co, "create_gmail_draft",
+                        lambda creds, to, subject, body, attachment=None, attachments=None:
+                        captured.update(to=to) or "url")
+    co.run(None, "sid", "Acme", "FDE", cfg,
+           lambda p: json.dumps({"subject": "s", "body": "Hi, note."}),
+           httpx.Client(), NOW)
+    assert captured["to"] == ""  # undeliverable -> blanked despite high confidence
+
+
+def test_hunter_verify_parses(monkeypatch, httpx_mock):
+    from jobpilot import hunter
+    monkeypatch.setenv("HUNTER_API_KEY", "k")
+    httpx_mock.add_response(method="GET", url=re.compile(r".*email-verifier.*"),
+                            json={"data": {"result": "deliverable", "score": 97}})
+    assert hunter.verify("a@b.com", httpx.Client())["result"] == "deliverable"
+
+
+def test_hunter_verify_skipped_without_key(monkeypatch):
+    from jobpilot import hunter
+    monkeypatch.delenv("HUNTER_API_KEY", raising=False)
+    assert hunter.verify("a@b.com", httpx.Client()) == {}
 
 
 def test_hunter_skipped_without_key(monkeypatch):
