@@ -86,8 +86,9 @@ def test_run_creates_pooled_draft_with_resume_and_cover(monkeypatch):
                   httpx.Client(), NOW)
 
     assert note.startswith("company outreach drafted")
-    assert captured["to"] == ""  # recipient left blank for the user to fill
-    assert captured["subject"].startswith("[JobPilot · Acme]")
+    assert captured["to"] == "careers@acme.com"  # no Hunter hit -> team-inbox fallback
+    assert captured["subject"] == "AI engineer interested in Acme"  # no branding prefix
+    assert "JobPilot" not in captured["subject"]
     assert "Jane Doe Candidate" in captured["body"]  # signature appended
     assert len(captured["attachments"]) == 2  # resume + cover letter
     assert appended["row"][1] == "Acme" and appended["row"][10] == "Drafted"
@@ -147,15 +148,17 @@ def test_run_addresses_draft_from_hunter_contact(monkeypatch):
     assert "->" in note
 
 
-def test_run_blank_to_for_low_confidence_hunter(monkeypatch):
+def test_run_uses_contact_when_not_undeliverable(monkeypatch):
     cfg = make_cfg()
     captured = {}
     monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
     monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: (
-        "", [{"name": "Sam Lee", "email": "sam@acme.com", "position": "Eng",
-              "department": "engineering", "seniority": "junior", "confidence": 40,
-              "score": 55}],
+        "", [{"name": "Sam Lee", "email": "sam@acme.com", "position": "Recruiter",
+              "department": "hr", "seniority": "senior", "confidence": 55,
+              "score": 100}],
     ))
+    monkeypatch.setattr(co.hunter, "verify",
+                        lambda email, client: {"result": "risky", "score": 60})
     monkeypatch.setattr(co, "_master_pdf", lambda *a, **k: None)
     monkeypatch.setattr(co, "cover_letter_pdf", lambda *a, **k: None)
     monkeypatch.setattr(co.sheets, "append_outreach_row", lambda creds, sid, row: None)
@@ -166,7 +169,7 @@ def test_run_blank_to_for_low_confidence_hunter(monkeypatch):
     co.run(None, "sid", "Acme", "FDE", cfg,
            lambda p: json.dumps({"subject": "s", "body": "Hi, note."}),
            httpx.Client(), NOW)
-    assert captured["to"] == ""  # below CONF_TO -> left blank for manual verify
+    assert captured["to"] == "sam@acme.com"  # risky (not undeliverable) -> still used
 
 
 def test_auto_company_outreach_selects_fresh_real_companies(monkeypatch):
@@ -214,7 +217,7 @@ def test_auto_company_outreach_respects_limit(monkeypatch):
     assert len(calls) == 3
 
 
-def test_run_blanks_undeliverable_recipient(monkeypatch):
+def test_run_drops_undeliverable_then_uses_team_inbox(monkeypatch):
     cfg = make_cfg()
     captured = {}
     monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
@@ -233,7 +236,8 @@ def test_run_blanks_undeliverable_recipient(monkeypatch):
     co.run(None, "sid", "Acme", "FDE", cfg,
            lambda p: json.dumps({"subject": "s", "body": "Hi, note."}),
            httpx.Client(), NOW)
-    assert captured["to"] == ""  # undeliverable -> blanked despite high confidence
+    # undeliverable person is dropped, falls back to a team inbox (never blank)
+    assert captured["to"] == "careers@acme.com"
 
 
 def test_hunter_verify_parses(monkeypatch, httpx_mock):

@@ -29,9 +29,7 @@ from jobpilot.outreach import (
 EMAIL_PROMPT = Path(__file__).parent / "prompts" / "company_outreach_v1.txt"
 COVER_PROMPT = Path(__file__).parent / "prompts" / "cover_letter_company_v1.txt"
 
-SUBJECT_TAG = "JobPilot"  # subject prefix groups drafts by company in Gmail search
 FOCUS = "AI engineering and software development"
-CONF_TO = 70  # only auto-address the draft to a Hunter email at/above this confidence
 
 VARIANTS = ("AIE", "FDE", "MLE", "SDE")
 VARIANT_FRAMING = {
@@ -272,16 +270,18 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
         # Reliable emails via Hunter (free tier); ('', []) when no key or no hit.
         _pattern, contacts = hunter.find_contacts(company, domain, client)
         primary = contacts[0] if contacts else None
-        to = primary["email"] if primary and primary["confidence"] >= CONF_TO else ""
         contact_name = primary["name"] if primary else ""
-        verify_note = ""
-        if to:  # confirm deliverability of the one chosen recipient (0.5 credit)
-            result = (hunter.verify(to, client).get("result") or "").lower()
+        to, verify_note = "", ""
+        if primary:  # verify the best contact (0.5 credit); use unless undeliverable
+            result = (hunter.verify(primary["email"], client).get("result") or "").lower()
             if result == "undeliverable":
-                verify_note = f"Hunter: {to} undeliverable, recipient left blank"
-                to = ""
-            elif result:
-                verify_note = f"verified {result}"
+                verify_note = "top contact undeliverable"
+            else:
+                to = primary["email"]
+                verify_note = f"verified {result}" if result else "unverified"
+        if not to and inboxes:
+            to = inboxes[0]  # team inbox so every draft has a recipient to review
+            verify_note = (f"{verify_note}; " if verify_note else "") + f"team inbox {to}"
         people_found = "; ".join(
             f"{c['name'] or '?'} ({c['position'] or c['department'] or 'n/a'}) "
             f"<{c['email']}> {c['confidence']}%" for c in contacts[:6]
@@ -290,7 +290,7 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
         draft = draft_company_email(company, reason, contact_name, cfg, llm)
         body = (f"{strip_closing(draft.body, cfg.profile.name)}\n\n"
                 f"{signature(cfg.profile)}\n")
-        subject = f"[{SUBJECT_TAG} · {company}] {draft.subject}"
+        subject = draft.subject  # no internal branding in a sent email
 
         attachments: list[tuple[str, bytes]] = []
         name_slug = _slug(cfg.profile.name)
@@ -309,10 +309,8 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
         # `to` is the best confident Hunter email, else blank for the user to fill.
         draft_url = create_gmail_draft(creds, to, subject, body,
                                        attachments=attachments)
-        if not contacts:
-            notes.append("no Hunter contacts (set HUNTER_API_KEY or find manually)")
-        elif not to:
-            notes.append("contacts found but unverified/low confidence, verify first")
+        if not to:
+            notes.append("no recipient found, add one manually before sending")
         if verify_note:
             notes.append(verify_note)
 
