@@ -24,3 +24,7 @@ src/jobpilot/resumes/*.pdf
 src/jobpilot/resumes/*.aux
 src/jobpilot/resumes/*.log
 src/jobpilot/resumes/*.out
+
+# token backups must never be committed
+inbox_tokens.json*
+*.bak

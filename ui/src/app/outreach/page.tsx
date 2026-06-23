@@ -19,11 +19,11 @@ export default async function OutreachPage() {
         <h1 className="display mt-1 text-2xl font-extrabold tracking-tight">Outreach</h1>
         <p className="mt-1 text-xs" style={{ color: "var(--text-dim)" }}>
           Search a company. JobPilot picks your best-fit resume, writes a short,
-          plain-English cold email, builds a tailored cover letter, and drops a draft
-          in your Gmail tagged <b>[JobPilot · Company]</b> so drafts pool by company.
-          The free Apollo plan does not hand out verified emails, so the draft is left
-          unaddressed: use the people-search links to find the right person, paste
-          their address, and send. Nothing is ever sent for you.
+          plain-English cold email, builds a tailored cover letter, finds the right
+          people via Hunter (when a key is set), and drops a draft in your Gmail tagged
+          <b> [JobPilot · Company]</b> so drafts pool by company. High-confidence emails
+          are pre-addressed; lower-confidence or missing ones stay blank with
+          people-search links so you find them by hand. Nothing is ever sent for you.
         </p>
       </div>
 

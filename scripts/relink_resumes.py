@@ -24,6 +24,8 @@ from jobpilot.gauth import credentials
 from jobpilot.tailor import _drive, _ensure_folder
 
 ROOT = Path(__file__).resolve().parent.parent
+# Prefer the one-page masters in resumes/; fall back to the repo root.
+RESUME_DIRS = [ROOT / "resumes", ROOT]
 VARIANTS = {
     "FDE": ("Forward Deployed Engineer", "Customer-facing, end-to-end ownership framing."),
     "AIE": ("AI Engineer", "GenAI / LLM-platform framing."),
@@ -56,9 +58,10 @@ def main() -> None:
     pdf_ids: dict[str, str] = {}
     resumes_json: list[dict] = []
     for variant, (title, blurb) in VARIANTS.items():
-        path = ROOT / FILENAME.format(variant=variant)
-        if not path.exists():
-            print(f"SKIP {variant}: {path.name} not found in repo root")
+        name = FILENAME.format(variant=variant)
+        path = next((d / name for d in RESUME_DIRS if (d / name).exists()), None)
+        if path is None:
+            print(f"SKIP {variant}: {name} not found in resumes/ or repo root")
             continue
         file_id = _upload(drive, masters, path.name, path.read_bytes())
         pdf_ids[variant] = file_id

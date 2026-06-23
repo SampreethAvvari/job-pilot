@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timezone
 
 import httpx
@@ -66,6 +67,7 @@ def test_run_creates_pooled_draft_with_resume_and_cover(monkeypatch):
     appended = {}
 
     monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
+    monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: ("", []))
     monkeypatch.setattr(co, "_master_pdf", lambda creds, cfg, variant: b"%PDF-resume")
     monkeypatch.setattr(co, "cover_letter_pdf",
                         lambda company, cfg, llm, reason: b"%PDF-cover")
@@ -94,6 +96,7 @@ def test_run_creates_pooled_draft_with_resume_and_cover(monkeypatch):
 def test_run_degrades_without_attachments(monkeypatch):
     cfg = make_cfg()
     monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
+    monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: ("", []))
     monkeypatch.setattr(co, "_master_pdf", lambda creds, cfg, variant: None)
     monkeypatch.setattr(co, "cover_letter_pdf",
                         lambda company, cfg, llm, reason: None)
@@ -105,3 +108,83 @@ def test_run_degrades_without_attachments(monkeypatch):
                   lambda p: json.dumps({"subject": "s", "body": "Hi, short note."}),
                   httpx.Client(), NOW)
     assert note.startswith("company outreach drafted")  # still drafts, never crashes
+
+
+def test_run_addresses_draft_from_hunter_contact(monkeypatch):
+    cfg = make_cfg()
+    captured = {}
+    appended = {}
+    seen = {}
+
+    monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
+    monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: (
+        "{first}.{last}@acme.com",
+        [{"name": "Riya Patel", "email": "riya.patel@acme.com", "position": "Recruiter",
+          "department": "hr", "seniority": "senior", "confidence": 95, "score": 100}],
+    ))
+    monkeypatch.setattr(co, "_master_pdf", lambda creds, cfg, variant: b"%PDF")
+    monkeypatch.setattr(co, "cover_letter_pdf", lambda *a, **k: b"%PDF")
+    monkeypatch.setattr(co.sheets, "append_outreach_row",
+                        lambda creds, sid, row: appended.update(row=row))
+
+    def fake_draft(creds, to, subject, body, attachment=None, attachments=None):
+        captured.update(to=to, body=body)
+        return "url"
+
+    monkeypatch.setattr(co, "create_gmail_draft", fake_draft)
+
+    def llm(prompt):
+        seen["p"] = prompt
+        return json.dumps({"subject": "AI engineer interested in Acme",
+                           "body": "Hi Riya, I build ML systems."})
+
+    note = co.run(None, "sid", "AIE", "AIE", cfg, llm, httpx.Client(), NOW)
+    assert captured["to"] == "riya.patel@acme.com"  # high-confidence email auto-addressed
+    assert "Hi Riya" in seen["p"]  # contact first name reaches the greeting
+    assert "riya.patel@acme.com" in appended["row"][12]  # People found column
+    assert "->" in note
+
+
+def test_run_blank_to_for_low_confidence_hunter(monkeypatch):
+    cfg = make_cfg()
+    captured = {}
+    monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
+    monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: (
+        "", [{"name": "Sam Lee", "email": "sam@acme.com", "position": "Eng",
+              "department": "engineering", "seniority": "junior", "confidence": 40,
+              "score": 55}],
+    ))
+    monkeypatch.setattr(co, "_master_pdf", lambda *a, **k: None)
+    monkeypatch.setattr(co, "cover_letter_pdf", lambda *a, **k: None)
+    monkeypatch.setattr(co.sheets, "append_outreach_row", lambda creds, sid, row: None)
+    monkeypatch.setattr(co, "create_gmail_draft",
+                        lambda creds, to, subject, body, attachment=None, attachments=None:
+                        captured.update(to=to) or "url")
+
+    co.run(None, "sid", "Acme", "FDE", cfg,
+           lambda p: json.dumps({"subject": "s", "body": "Hi, note."}),
+           httpx.Client(), NOW)
+    assert captured["to"] == ""  # below CONF_TO -> left blank for manual verify
+
+
+def test_hunter_skipped_without_key(monkeypatch):
+    from jobpilot import hunter
+    monkeypatch.delenv("HUNTER_API_KEY", raising=False)
+    assert hunter.find_contacts("Acme", "acme.com", httpx.Client()) == ("", [])
+
+
+def test_hunter_parses_and_ranks_by_role(monkeypatch, httpx_mock):
+    from jobpilot import hunter
+    monkeypatch.setenv("HUNTER_API_KEY", "k")
+    httpx_mock.add_response(method="GET", url=re.compile(r".*domain-search.*"), json={
+        "data": {"pattern": "{first}", "emails": [
+            {"value": "eng@acme.com", "first_name": "Eng", "last_name": "Person",
+             "position": "Engineer", "department": "engineering", "confidence": 90},
+            {"value": "riya@acme.com", "first_name": "Riya", "last_name": "P",
+             "position": "Technical Recruiter", "department": "hr", "confidence": 80},
+        ]},
+    })
+    pattern, contacts = hunter.find_contacts("Acme", "acme.com", httpx.Client())
+    assert pattern == "{first}"
+    assert contacts[0]["email"] == "riya@acme.com"  # recruiter outranks engineer
+
