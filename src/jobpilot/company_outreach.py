@@ -1,9 +1,9 @@
-"""Company-centric cold outreach: search a company, draft a personalized email
-with the best-fit master resume + a tailored cover letter, pool drafts by company
-in Gmail (subject prefix), and surface people-search links so the user finds the
-real recipient and sends one by one.
+"""Company-centric cold outreach: search a company, find its PUBLISHED careers
+email (no guessing — company website, job-post text, then web search), draft a
+personalized email with the best-fit master resume + a tailored cover letter, and
+record every careers email found per company on the Outreach tab.
 
-Built for the FREE Apollo plan: no verified email is assumed. NOTHING IS EVER SENT.
+NOTHING IS EVER SENT — drafts only; the user reviews and sends.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
-from jobpilot import hunter, sheets
+from jobpilot import sheets, website_email
 from jobpilot.config import Config
 from jobpilot.outreach import (
     Draft,
@@ -252,8 +252,13 @@ def _slug(name: str) -> str:
 # --------------------------------------------------------------------------- #
 def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
         llm: Callable[[str], str], client: httpx.Client, now: datetime,
-        reason: str = "") -> str:
-    """Draft one pooled cold email for a company; record it on the Outreach tab."""
+        reason: str = "", jd_text: str = "", require_email: bool = False) -> str:
+    """Draft one cold email for a company and record it on the Outreach tab.
+
+    Recipient is a PUBLISHED careers email (website / job text / web search), never
+    guessed. With require_email=True a company that publishes none is recorded as
+    "No email" and skipped (no draft); otherwise it falls back to a team inbox.
+    """
     company = company.strip()
     if not company:
         return "company outreach skipped: empty company name"
@@ -267,27 +272,24 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
         inboxes = guessed_inboxes(domain)
         links = find_people_links(company)
 
-        # Reliable emails via Hunter (free tier); ('', []) when no key or no hit.
-        _pattern, contacts = hunter.find_contacts(company, domain, client)
-        primary = contacts[0] if contacts else None
-        contact_name = primary["name"] if primary else ""
-        to, verify_note = "", ""
-        if primary:  # verify the best contact (0.5 credit); use unless undeliverable
-            result = (hunter.verify(primary["email"], client).get("result") or "").lower()
-            if result == "undeliverable":
-                verify_note = "top contact undeliverable"
-            else:
-                to = primary["email"]
-                verify_note = f"verified {result}" if result else "unverified"
-        if not to and inboxes:
-            to = inboxes[0]  # team inbox so every draft has a recipient to review
-            verify_note = (f"{verify_note}; " if verify_note else "") + f"team inbox {to}"
-        people_found = "; ".join(
-            f"{c['name'] or '?'} ({c['position'] or c['department'] or 'n/a'}) "
-            f"<{c['email']}> {c['confidence']}%" for c in contacts[:6]
-        )
+        # Published careers emails only (website -> job text -> web search). A
+        # company can list several; record them all, draft to the best.
+        emails = website_email.find_company_emails(company, domain, jd_text, client)
+        to = emails[0] if emails else ""
+        emails_found = "; ".join(emails)
 
-        draft = draft_company_email(company, reason, contact_name, cfg, llm)
+        if not to and require_email:
+            sheets.append_outreach_row(creds, spreadsheet_id, [
+                now.strftime("%Y-%m-%d %H:%M"), company, domain, variant, reason,
+                "", ", ".join(inboxes), "", "", "no", "No email",
+                "no published careers email found | find: "
+                + " ".join(u for _, u in links[:3]), "",
+            ])
+            return f"company outreach skipped: {company} (no published email)"
+        if not to and inboxes:
+            to = inboxes[0]  # explicit single-company search: team-inbox fallback
+
+        draft = draft_company_email(company, reason, "", cfg, llm)
         body = (f"{strip_closing(draft.body, cfg.profile.name)}\n\n"
                 f"{signature(cfg.profile)}\n")
         subject = draft.subject  # no internal branding in a sent email
@@ -306,13 +308,9 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
         else:
             notes.append("cover letter not generated (pdflatex/LLM unavailable)")
 
-        # `to` is the best confident Hunter email, else blank for the user to fill.
         draft_url = create_gmail_draft(creds, to, subject, body,
                                        attachments=attachments)
-        if not to:
-            notes.append("no recipient found, add one manually before sending")
-        if verify_note:
-            notes.append(verify_note)
+        notes.append("published email" if emails else "team-inbox fallback, verify")
 
         sheets.append_outreach_row(creds, spreadsheet_id, [
             now.strftime("%Y-%m-%d %H:%M"),
@@ -327,10 +325,9 @@ def run(creds, spreadsheet_id: str, company: str, variant: str, cfg: Config,
             "yes" if cover else "no",
             "Drafted",
             "; ".join(notes) + (" | find: " + " ".join(u for _, u in links[:3])),
-            people_found,
+            emails_found,
         ])
-        sent_to = f" -> {to}" if to else " (recipient blank, verify)"
-        return (f"company outreach drafted: {company} ({variant}){sent_to}"
+        return (f"company outreach drafted: {company} ({variant}) -> {to}"
                 + (f" | {'; '.join(notes)}" if notes else ""))
     except Exception as exc:  # noqa: BLE001 — one failure must not crash the job
         return f"company outreach FAILED for {company}: {type(exc).__name__}: {exc}"
@@ -342,13 +339,15 @@ def _recency(row: dict) -> str:
 
 def auto_company_outreach(creds, spreadsheet_id: str, cfg: Config,
                           llm: Callable[[str], str], client: httpx.Client,
-                          now: datetime, limit: int = 30, min_fit: int = 60) -> list[str]:
+                          now: datetime, limit: int = 30, min_fit: int = 60,
+                          roles: set[str] | None = None) -> list[str]:
     """Batch-draft outreach for the freshest real-hiring companies on the Jobs tab.
 
     Selects direct-board (own-ATS) postings only, drops aggregator reposts, requires
-    a decent fit, dedupes to one draft per company, skips companies already drafted,
-    and uses each job's recommended resume variant so the pitch matches the field.
-    One Hunter credit per company; capped at `limit`.
+    a decent fit, optionally restricts to `roles` (e.g. {"AIE","FDE"}), dedupes to
+    one draft per company, skips companies already handled, and uses each job's
+    recommended resume variant so the pitch matches the field. Only drafts companies
+    that publish a real careers email; the rest are recorded as "No email".
     """
     rows = sheets.read_rows(creds, spreadsheet_id)
     done = {
@@ -365,6 +364,8 @@ def auto_company_outreach(creds, spreadsheet_id: str, cfg: Config,
             continue  # aggregators carry reposts/agencies — skip
         if r.get("Status") in ("Rejected", "Dismissed"):
             continue
+        if roles and r.get("Role") not in roles:
+            continue
         fit = int(r["Fit"]) if str(r.get("Fit", "")).isdigit() else 0
         if fit < min_fit:
             continue
@@ -378,7 +379,8 @@ def auto_company_outreach(creds, spreadsheet_id: str, cfg: Config,
     if not chosen:
         return [f"auto outreach: no fresh direct-board companies with fit >= {min_fit}"]
 
-    notes = [f"auto outreach: drafting {len(chosen)} fresh companies (cap {limit})"]
+    label = "/".join(sorted(roles)) if roles else "all"
+    notes = [f"auto outreach: scanning {len(chosen)} {label} companies (cap {limit})"]
     for r in chosen:
         company = r["Company"].strip()
         variant = (r.get("Resume variant") or "").upper()
@@ -386,5 +388,6 @@ def auto_company_outreach(creds, spreadsheet_id: str, cfg: Config,
         reason = (f"You have a fresh {role} opening; this is the strongest match of "
                   f"my four resumes for {company}.")
         notes.append(run(creds, spreadsheet_id, company, variant, cfg, llm, client,
-                         now, reason=reason))
+                         now, reason=reason, jd_text=r.get("JD excerpt", ""),
+                         require_email=True))
     return notes

@@ -76,7 +76,7 @@ export type Outreach = {
   coverLetter: string; // "yes" | "no"
   status: string;
   notes: string;
-  peopleFound: string; // Hunter contacts: "Name (role) <email> 95%; ..."
+  emailsFound: string; // published careers emails found, e.g. "careers@x.com; jobs@x.com"
 };
 
 // Companies watchlist tab (columns A-H — keep in sync with sheets.py COMPANIES_HEADERS)

@@ -67,7 +67,8 @@ def test_run_creates_pooled_draft_with_resume_and_cover(monkeypatch):
     appended = {}
 
     monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
-    monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: ("", []))
+    monkeypatch.setattr(co.website_email, "find_company_emails",
+                        lambda company, domain, jd, client: [])
     monkeypatch.setattr(co, "_master_pdf", lambda creds, cfg, variant: b"%PDF-resume")
     monkeypatch.setattr(co, "cover_letter_pdf",
                         lambda company, cfg, llm, reason: b"%PDF-cover")
@@ -97,7 +98,8 @@ def test_run_creates_pooled_draft_with_resume_and_cover(monkeypatch):
 def test_run_degrades_without_attachments(monkeypatch):
     cfg = make_cfg()
     monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
-    monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: ("", []))
+    monkeypatch.setattr(co.website_email, "find_company_emails",
+                        lambda company, domain, jd, client: [])
     monkeypatch.setattr(co, "_master_pdf", lambda creds, cfg, variant: None)
     monkeypatch.setattr(co, "cover_letter_pdf",
                         lambda company, cfg, llm, reason: None)
@@ -111,20 +113,15 @@ def test_run_degrades_without_attachments(monkeypatch):
     assert note.startswith("company outreach drafted")  # still drafts, never crashes
 
 
-def test_run_addresses_draft_from_hunter_contact(monkeypatch):
+def test_run_addresses_from_published_email(monkeypatch):
     cfg = make_cfg()
     captured = {}
     appended = {}
-    seen = {}
 
     monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
-    monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: (
-        "{first}.{last}@acme.com",
-        [{"name": "Riya Patel", "email": "riya.patel@acme.com", "position": "Recruiter",
-          "department": "hr", "seniority": "senior", "confidence": 95, "score": 100}],
-    ))
-    monkeypatch.setattr(co.hunter, "verify",
-                        lambda email, client: {"result": "deliverable", "score": 98})
+    monkeypatch.setattr(co.website_email, "find_company_emails",
+                        lambda company, domain, jd, client: ["careers@acme.com",
+                                                              "jobs@acme.com"])
     monkeypatch.setattr(co, "_master_pdf", lambda creds, cfg, variant: b"%PDF")
     monkeypatch.setattr(co, "cover_letter_pdf", lambda *a, **k: b"%PDF")
     monkeypatch.setattr(co.sheets, "append_outreach_row",
@@ -136,40 +133,33 @@ def test_run_addresses_draft_from_hunter_contact(monkeypatch):
 
     monkeypatch.setattr(co, "create_gmail_draft", fake_draft)
 
-    def llm(prompt):
-        seen["p"] = prompt
-        return json.dumps({"subject": "AI engineer interested in Acme",
-                           "body": "Hi Riya, I build ML systems."})
-
-    note = co.run(None, "sid", "AIE", "AIE", cfg, llm, httpx.Client(), NOW)
-    assert captured["to"] == "riya.patel@acme.com"  # high-confidence email auto-addressed
-    assert "Hi Riya" in seen["p"]  # contact first name reaches the greeting
-    assert "riya.patel@acme.com" in appended["row"][12]  # People found column
+    note = co.run(None, "sid", "Acme", "AIE", cfg,
+                  lambda p: json.dumps({"subject": "AI engineer interested in Acme",
+                                        "body": "Hi, I build ML systems."}),
+                  httpx.Client(), NOW)
+    assert captured["to"] == "careers@acme.com"  # best published email addressed
+    assert "careers@acme.com" in appended["row"][12]  # Emails found column
+    assert "jobs@acme.com" in appended["row"][12]  # all found emails recorded
     assert "->" in note
 
 
-def test_run_uses_contact_when_not_undeliverable(monkeypatch):
+def test_run_skips_when_required_and_no_email(monkeypatch):
     cfg = make_cfg()
-    captured = {}
+    drafts = []
+    appended = {}
     monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
-    monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: (
-        "", [{"name": "Sam Lee", "email": "sam@acme.com", "position": "Recruiter",
-              "department": "hr", "seniority": "senior", "confidence": 55,
-              "score": 100}],
-    ))
-    monkeypatch.setattr(co.hunter, "verify",
-                        lambda email, client: {"result": "risky", "score": 60})
-    monkeypatch.setattr(co, "_master_pdf", lambda *a, **k: None)
-    monkeypatch.setattr(co, "cover_letter_pdf", lambda *a, **k: None)
-    monkeypatch.setattr(co.sheets, "append_outreach_row", lambda creds, sid, row: None)
+    monkeypatch.setattr(co.website_email, "find_company_emails",
+                        lambda company, domain, jd, client: [])
+    monkeypatch.setattr(co.sheets, "append_outreach_row",
+                        lambda creds, sid, row: appended.update(row=row))
     monkeypatch.setattr(co, "create_gmail_draft",
-                        lambda creds, to, subject, body, attachment=None, attachments=None:
-                        captured.update(to=to) or "url")
+                        lambda *a, **k: drafts.append(a) or "url")
 
-    co.run(None, "sid", "Acme", "FDE", cfg,
-           lambda p: json.dumps({"subject": "s", "body": "Hi, note."}),
-           httpx.Client(), NOW)
-    assert captured["to"] == "sam@acme.com"  # risky (not undeliverable) -> still used
+    note = co.run(None, "sid", "Acme", "AIE", cfg, lambda p: "{}",
+                  httpx.Client(), NOW, require_email=True)
+    assert "skipped" in note and "no published email" in note
+    assert drafts == []  # no draft created when a real email is required and absent
+    assert appended["row"][10] == "No email"  # recorded so it is not re-checked
 
 
 def test_auto_company_outreach_selects_fresh_real_companies(monkeypatch):
@@ -195,8 +185,8 @@ def test_auto_company_outreach_selects_fresh_real_companies(monkeypatch):
     monkeypatch.setattr(co.sheets, "read_outreach",
                         lambda creds, sid: [{"Company": "DoneCo"}])
     monkeypatch.setattr(co, "run",
-                        lambda creds, sid, company, variant, cfg, llm, client, now,
-                        reason="": calls.append((company, variant)) or f"drafted {company}")
+                        lambda creds, sid, company, variant, *a, **k:
+                        calls.append((company, variant)) or f"drafted {company}")
 
     co.auto_company_outreach(None, "sid", cfg, lambda p: "{}", httpx.Client(), NOW)
     picked = dict(calls)
@@ -217,27 +207,31 @@ def test_auto_company_outreach_respects_limit(monkeypatch):
     assert len(calls) == 3
 
 
-def test_run_drops_undeliverable_then_uses_team_inbox(monkeypatch):
-    cfg = make_cfg()
-    captured = {}
-    monkeypatch.setattr(co.sheets, "read_companies", lambda creds, sid: [])
-    monkeypatch.setattr(co.hunter, "find_contacts", lambda company, domain, client: (
-        "", [{"name": "Sam Lee", "email": "sam@acme.com", "position": "Recruiter",
-              "department": "hr", "seniority": "senior", "confidence": 92, "score": 100}],
-    ))
-    monkeypatch.setattr(co.hunter, "verify",
-                        lambda email, client: {"result": "undeliverable", "score": 10})
-    monkeypatch.setattr(co, "_master_pdf", lambda *a, **k: None)
-    monkeypatch.setattr(co, "cover_letter_pdf", lambda *a, **k: None)
-    monkeypatch.setattr(co.sheets, "append_outreach_row", lambda creds, sid, row: None)
-    monkeypatch.setattr(co, "create_gmail_draft",
-                        lambda creds, to, subject, body, attachment=None, attachments=None:
-                        captured.update(to=to) or "url")
-    co.run(None, "sid", "Acme", "FDE", cfg,
-           lambda p: json.dumps({"subject": "s", "body": "Hi, note."}),
-           httpx.Client(), NOW)
-    # undeliverable person is dropped, falls back to a team inbox (never blank)
-    assert captured["to"] == "careers@acme.com"
+def test_website_emails_from_text_filters(monkeypatch):
+    from jobpilot import website_email
+    text = ("Apply: careers@acme.com or jobs@acme.com. Legal: legal@acme.com. "
+            "Vendor: hi@other.com. Asset: logo%402x@acme.com")
+    got = website_email.emails_from_text(text, "acme.com")
+    assert "careers@acme.com" in got and "jobs@acme.com" in got
+    assert "legal@acme.com" not in got  # deny-listed
+    assert "hi@other.com" not in got  # off-domain
+
+
+def test_website_find_company_emails_combines_and_skips_search(monkeypatch):
+    from jobpilot import website_email
+    monkeypatch.setattr(website_email, "find_careers_email",
+                        lambda domain, client, max_pages=6: ["info@acme.com"])
+    called = {"search": False}
+
+    def no_search(company, domain, client):
+        called["search"] = True
+        return ["careers@acme.com"]
+
+    monkeypatch.setattr(website_email, "search_emails", no_search)
+    out = website_email.find_company_emails("Acme", "acme.com",
+                                            "reach careers@acme.com", httpx.Client())
+    assert "careers@acme.com" in out  # from job text, ranked above info@
+    assert called["search"] is False  # search only fires when free sources are empty
 
 
 def test_hunter_verify_parses(monkeypatch, httpx_mock):

@@ -147,7 +147,7 @@ export function OutreachConsole({ initial }: { initial: Outreach[] }) {
         <table className="console-table">
           <thead>
             <tr>
-              <th>Company</th><th>Resume</th><th>Draft</th><th>People found</th>
+              <th>Company</th><th>Resume</th><th>Draft</th><th>Emails found</th>
               <th>Find the person</th><th>Quick inboxes</th><th>Cover</th><th>Status</th>
             </tr>
           </thead>
@@ -173,10 +173,10 @@ export function OutreachConsole({ initial }: { initial: Outreach[] }) {
                     </a>
                   ) : "—"}
                 </td>
-                <td className="max-w-64 text-[10px]" title={o.peopleFound}
-                    style={{ color: o.peopleFound ? "var(--text-dim)" : "var(--text-faint)" }}>
-                  {o.peopleFound
-                    ? o.peopleFound.split(";").slice(0, 3).map((p, i) => (
+                <td className="max-w-64 text-[10px]" title={o.emailsFound}
+                    style={{ color: o.emailsFound ? "var(--text-dim)" : "var(--text-faint)" }}>
+                  {o.emailsFound
+                    ? o.emailsFound.split(";").slice(0, 3).map((p, i) => (
                         <div key={i} className="truncate">{p.trim()}</div>
                       ))
                     : "—"}
