@@ -21,6 +21,8 @@ def main() -> None:
                         help="draft a company-wide cold-email (by company name)")
     parser.add_argument("--auto-company-outreach", type=int, default=0,
                         help="batch-draft outreach for up to N fresh hiring companies")
+    parser.add_argument("--roles", default="",
+                        help="restrict --auto-company-outreach to roles, e.g. AIE,FDE")
     parser.add_argument("--variant", default="",
                         help="force a resume variant for --company-outreach (AIE/FDE/MLE/SDE)")
     parser.add_argument("--fast", action="store_true",
@@ -94,8 +96,10 @@ def main() -> None:
         client = httpx.Client(timeout=60)
         now = datetime.now(timezone.utc)
         if args.auto_company_outreach:
+            roles = {r.strip().upper() for r in args.roles.split(",") if r.strip()} or None
             for note in company_outreach.auto_company_outreach(
-                    creds, sid, cfg, llm, client, now, limit=args.auto_company_outreach):
+                    creds, sid, cfg, llm, client, now,
+                    limit=args.auto_company_outreach, roles=roles):
                 print(note)
         else:
             print(company_outreach.run(

@@ -324,7 +324,7 @@ def update_company_rows(creds, spreadsheet_id: str,
 OUTREACH_HEADERS = [
     "Searched at", "Company", "Domain", "Resume variant", "Variant reason",
     "Subject", "Guessed emails", "Draft", "Resume", "Cover letter", "Status", "Notes",
-    "People found",
+    "Emails found",
 ]
 
 
