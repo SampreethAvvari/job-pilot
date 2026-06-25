@@ -28,7 +28,8 @@ YOUR TASKS
    date placeholder line "\today", greeting ("Dear {company} Hiring Team,"), 3 short
    paragraphs (~220 words total): why this role, 2-3 concrete matching accomplishments drawn
    from the resume (true facts only), close with enthusiasm and availability. Sign off
-   "Sincerely, \\\\ Sampreeth Avvari". No \maketitle, no letter class.
+   "Sincerely, \\\\ <the candidate's name exactly as in the resume header>". No
+   \maketitle, no letter class.
 4. changes: One sentence on what you emphasized.
 
 Return JSON exactly: {{"keywords": [...], "tailored_tex": "...", "cover_letter_tex": "...", "changes": "..."}}

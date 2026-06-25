@@ -110,7 +110,7 @@ export function RepliesTable({ initial }: { initial: Job[] }) {
             <tr><td colSpan={5} className="py-10 text-center"
                     style={{ color: "var(--text-faint)" }}>
               No replies yet. Once you apply to jobs and recruiters respond to
-              spa9659@nyu.edu, they show up here automatically.
+              your watched inboxes, they show up here automatically.
             </td></tr>
           )}
         </tbody>

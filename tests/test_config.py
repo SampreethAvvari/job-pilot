@@ -19,7 +19,7 @@ sources:
   remoteok:
     enabled: false
 digest:
-  to: spa9659@nyu.edu
+  to: you@example.com
 """
 
 

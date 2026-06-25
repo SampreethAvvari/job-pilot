@@ -22,7 +22,7 @@ Cloud Scheduler (30-min fast-fetch + 4x/day full run)
 Cloud Run Job "jobpilot" (Python 3.12)
   fetch 7 sources → freshness/seniority/citizenship filters → Gemini scoring
   → Google Sheet (database + dashboard) → tailored resume+cover PDFs (pdflatex)
-  → recruiter-contact lookup + Gmail outreach drafts → inbox reply scanner
+  → company outreach (published-email lookup) + Gmail drafts → inbox scanner
   → digest email
         ▲ trigger / read / write
 Cloud Run Service "jobpilot-ui" (Next.js 16) behind IAP — your private console
@@ -35,9 +35,12 @@ Gemini Flash pennies, Apify free $5 credits (LinkedIn), Adzuna/Apollo free tiers
 
 - Google account with a GCP **billing account** (new accounts get $300 free credits)
 - CLIs installed and authenticated: `gcloud`, `gh`, `git`, `docker`, Python 3.12+, Node 20+
-- Free accounts + keys: [Apify](https://apify.com) (Settings → API & Integrations →
-  personal token), [Adzuna developer](https://developer.adzuna.com) (app_id + app_key),
-  optionally [Apollo.io](https://apollo.io) (Settings → Integrations → API key)
+- Free accounts + keys (all optional — each feature degrades gracefully without one):
+  [Apify](https://apify.com) (LinkedIn jobs; personal token),
+  [Adzuna developer](https://developer.adzuna.com) (job source; app_id + app_key),
+  [Hunter.io](https://hunter.io) (outreach: verified named contacts; free tier ~50/mo),
+  [Serper.dev](https://serper.dev) (outreach: web-search email lookup; free tier),
+  [Apollo.io](https://apollo.io) (legacy per-job recruiter lookup)
 
 ## Step 0 — Personalize the repo (DO THIS FIRST)
 
@@ -135,7 +138,9 @@ printf '%s' '<refresh-token-from-step-3>' | gcloud secrets create GOOGLE_OAUTH_R
 printf '%s' '<apify-token>'   | gcloud secrets create APIFY_TOKEN    --data-file=- --project $PROJECT
 printf '%s' '<adzuna-app-id>' | gcloud secrets create ADZUNA_APP_ID  --data-file=- --project $PROJECT
 printf '%s' '<adzuna-key>'    | gcloud secrets create ADZUNA_APP_KEY --data-file=- --project $PROJECT
-printf '%s' '<apollo-key>'    | gcloud secrets create APOLLO_API_KEY --data-file=- --project $PROJECT  # optional
+printf '%s' '<apollo-key>'    | gcloud secrets create APOLLO_API_KEY --data-file=- --project $PROJECT  # optional (legacy per-job lookup)
+printf '%s' '<hunter-key>'    | gcloud secrets create HUNTER_API_KEY --data-file=- --project $PROJECT  # optional (outreach: verified contacts)
+printf '%s' '<serper-key>'    | gcloud secrets create SERPER_API_KEY --data-file=- --project $PROJECT  # optional (outreach: web-search emails)
 
 # optional — only when watching extra inboxes (Step 3 --inbox):
 gcloud secrets create JOBPILOT_INBOX_TOKENS --data-file=inbox_tokens.json --project $PROJECT
@@ -151,7 +156,7 @@ gcloud run jobs update jobpilot --region $REGION --project $PROJECT \
 gcloud run jobs deploy jobpilot --source . --project $PROJECT --region $REGION \
   --service-account jobpilot-runner@$PROJECT.iam.gserviceaccount.com \
   --set-env-vars GOOGLE_CLOUD_PROJECT=$PROJECT \
-  --set-secrets "APIFY_TOKEN=APIFY_TOKEN:latest,ADZUNA_APP_ID=ADZUNA_APP_ID:latest,ADZUNA_APP_KEY=ADZUNA_APP_KEY:latest,GOOGLE_OAUTH_CLIENT_JSON=GOOGLE_OAUTH_CLIENT_JSON:latest,GOOGLE_OAUTH_REFRESH_TOKEN=GOOGLE_OAUTH_REFRESH_TOKEN:latest,APOLLO_API_KEY=APOLLO_API_KEY:latest" \
+  --set-secrets "APIFY_TOKEN=APIFY_TOKEN:latest,ADZUNA_APP_ID=ADZUNA_APP_ID:latest,ADZUNA_APP_KEY=ADZUNA_APP_KEY:latest,GOOGLE_OAUTH_CLIENT_JSON=GOOGLE_OAUTH_CLIENT_JSON:latest,GOOGLE_OAUTH_REFRESH_TOKEN=GOOGLE_OAUTH_REFRESH_TOKEN:latest,APOLLO_API_KEY=APOLLO_API_KEY:latest,HUNTER_API_KEY=HUNTER_API_KEY:latest,SERPER_API_KEY=SERPER_API_KEY:latest" \
   --task-timeout 45m --max-retries 0
 
 # first run — watch it create your Sheet (id is printed in the logs)
@@ -238,7 +243,7 @@ Then in `.github/workflows/deploy.yml`: change the `if:` guard to your repo, and
 ## Verify
 
 ```bash
-.venv/Scripts/python -m pytest -q                 # 49+ tests green
+.venv/Scripts/python -m pytest -q                 # 130+ tests green
 .venv/Scripts/python -m jobpilot --dry-run --sources greenhouse,ashby   # live fetch, no creds needed
 gcloud run jobs execute jobpilot --region $REGION --project $PROJECT --wait
 ```
@@ -300,10 +305,22 @@ Third-party access, or destroy the `GOOGLE_OAUTH_REFRESH_TOKEN` secret.
   Gemini rewrites your variant within truth guardrails, pdflatex compiles a one-page
   PDF + cover letter, both upload to Drive and link onto the row with extracted JD
   keywords. Cost ≈ a cent per job, capped by `tailoring.max_per_run`.
-- **Outreach drafts** (`outreach.py`, `apollo.py`): when a job turns *Applied* (or
-  on-demand ✉Draft), Apollo looks up 1–2 recruiters (skips gracefully without a
-  key), Gemini writes a ≤130-word note from your real accomplishments, and it lands
-  in **your Gmail drafts** with a LinkedIn people-search fallback link on the row.
+- **Per-job outreach drafts** (`outreach.py`, `apollo.py`): when a job turns
+  *Applied* (or on-demand ✉Draft), Apollo looks up 1–2 recruiters (skips gracefully
+  without a key), Gemini writes a short note from your real accomplishments, and it
+  lands in **your Gmail drafts** with a LinkedIn people-search fallback on the row.
+- **Company outreach** (`company_outreach.py`, `website_email.py`, `hunter.py`, the
+  console **Outreach** tab): search a company → pick the best-fit resume of four
+  (auto, overridable) → short plain-English cold email (no buzzwords, no em dashes)
+  + tailored one-page cover letter → **Gmail draft, never sent**. The recipient is a
+  **published** careers email, never guessed: the company website (`/careers`,
+  `/contact`…), then any email printed in the job description, then a web search
+  (Serper). With **`HUNTER_API_KEY`** set it also pulls verified named contacts;
+  with **`SERPER_API_KEY`** set it adds the web-search source. Every careers email
+  found is recorded per company on the Sheet's **Outreach** tab. CLI:
+  `--company-outreach "<Company>"` (one), `--auto-company-outreach N [--roles AIE,FDE]`
+  (batch the freshest direct-board, entry-level US companies that publish an email;
+  deduped; capped at N). All draft-only.
 - **Inbox watch** (`inboxwatch.py`): every run (fast + full) reads recent mail
   from the primary inbox plus any extra accounts in `JOBPILOT_INBOX_TOKENS`, and
   judges EVERY email — not just tracked applications. A genuine next step
@@ -320,7 +337,9 @@ Third-party access, or destroy the `GOOGLE_OAUTH_REFRESH_TOKEN` secret.
 - **Console** (`ui/`): jobs table (role/posted/fit/source filters, three sort
   modes), Apply→confirm-on-return flow with green ticks and Applied dates,
   **Applied (n)** tab, ✕ Dismiss (hide forever, auditable), resume armory,
-  replies feed, ⟳ fast refresh (fetch+score only, ~3–6 min).
+  replies feed, **Companies** watchlist, **Outreach** tab (company search +
+  batch-draft button), per-job **copilot chat** drawer, ⟳ fast refresh
+  (fetch+score only, ~3–6 min).
 - **Schedules**: 30-min fast-fetch (free sources), 4×/day full runs. Change cadence
   with `gcloud scheduler jobs update`.
 
