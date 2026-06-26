@@ -23,6 +23,8 @@ def main() -> None:
                         help="batch-draft outreach for up to N fresh hiring companies")
     parser.add_argument("--roles", default="",
                         help="restrict --auto-company-outreach to roles, e.g. AIE,FDE")
+    parser.add_argument("--force", action="store_true",
+                        help="--auto-company-outreach: re-draft even companies already done")
     parser.add_argument("--variant", default="",
                         help="force a resume variant for --company-outreach (AIE/FDE/MLE/SDE)")
     parser.add_argument("--fast", action="store_true",
@@ -99,7 +101,7 @@ def main() -> None:
             roles = {r.strip().upper() for r in args.roles.split(",") if r.strip()} or None
             for note in company_outreach.auto_company_outreach(
                     creds, sid, cfg, llm, client, now,
-                    limit=args.auto_company_outreach, roles=roles):
+                    limit=args.auto_company_outreach, roles=roles, force=args.force):
                 print(note)
         else:
             print(company_outreach.run(
