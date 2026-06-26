@@ -111,14 +111,20 @@ def search_emails(company: str, domain: str, client: httpx.Client) -> list[str]:
 
 def find_company_emails(company: str, domain: str, jd_text: str,
                         client: httpx.Client) -> list[str]:
-    """All published career emails for a company across the three sources, ranked.
+    """All real career emails for a company across four sources, ranked.
 
     Website first (most authoritative), then any in the job text we already have,
-    then a web search. De-duped; [] when nothing is published anywhere.
+    then a web search, then Hunter verified contacts as a last resort. Each later
+    source only runs when the earlier ones came up empty (so paid credits are
+    spent sparingly). De-duped; [] when nothing is found anywhere. No guessing.
     """
     found: set[str] = set()
     found |= set(find_careers_email(domain, client))
     found |= emails_from_text(jd_text or "", domain)
     if not found:  # only spend a search query when the free sources came up empty
         found |= set(search_emails(company, domain, client))
+    if not found:  # last resort: Hunter verified named contacts (still no guessing)
+        from jobpilot import hunter
+        _pattern, contacts = hunter.find_contacts(company, domain, client)
+        found |= {c["email"] for c in contacts if c.get("email")}
     return rank_emails(found)

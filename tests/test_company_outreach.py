@@ -234,6 +234,17 @@ def test_website_find_company_emails_combines_and_skips_search(monkeypatch):
     assert called["search"] is False  # search only fires when free sources are empty
 
 
+def test_website_find_company_emails_hunter_fallback(monkeypatch):
+    from jobpilot import hunter, website_email
+    monkeypatch.setattr(website_email, "find_careers_email",
+                        lambda d, c, max_pages=6: [])
+    monkeypatch.setattr(website_email, "search_emails", lambda co, d, c: [])
+    monkeypatch.setattr(hunter, "find_contacts", lambda co, d, c: (
+        "", [{"name": "Riya", "email": "riya@acme.com", "confidence": 90}]))
+    out = website_email.find_company_emails("Acme", "acme.com", "", httpx.Client())
+    assert "riya@acme.com" in out  # Hunter fills in when free sources are empty
+
+
 def test_hunter_verify_parses(monkeypatch, httpx_mock):
     from jobpilot import hunter
     monkeypatch.setenv("HUNTER_API_KEY", "k")
