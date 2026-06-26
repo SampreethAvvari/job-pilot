@@ -340,7 +340,8 @@ def _recency(row: dict) -> str:
 def auto_company_outreach(creds, spreadsheet_id: str, cfg: Config,
                           llm: Callable[[str], str], client: httpx.Client,
                           now: datetime, limit: int = 30, min_fit: int = 60,
-                          roles: set[str] | None = None) -> list[str]:
+                          roles: set[str] | None = None,
+                          force: bool = False) -> list[str]:
     """Batch-draft outreach for the freshest real-hiring companies on the Jobs tab.
 
     Selects direct-board (own-ATS) postings only, drops aggregator reposts, requires
@@ -350,7 +351,7 @@ def auto_company_outreach(creds, spreadsheet_id: str, cfg: Config,
     that publish a real careers email; the rest are recorded as "No email".
     """
     rows = sheets.read_rows(creds, spreadsheet_id)
-    done = {
+    done = set() if force else {
         (r.get("Company") or "").strip().lower()
         for r in sheets.read_outreach(creds, spreadsheet_id)
         if r.get("Company")
