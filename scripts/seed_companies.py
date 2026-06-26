@@ -92,6 +92,54 @@ CANDIDATES: list[tuple[str, str]] = [
     ("Dell Technologies", "https://dell.wd1.myworkdayjobs.com/External"),
     ("ServiceNow", "https://careers.smartrecruiters.com/ServiceNow"),
     ("Palo Alto Networks", "https://careers.smartrecruiters.com/PaloAltoNetworks"),
+    # --- More applied-AI / ML startups ---
+    ("Adept AI", ""), ("Contextual AI", ""), ("Cresta", ""), ("Moveworks", ""),
+    ("Synthesia", ""), ("Descript", ""), ("AssemblyAI", ""), ("Deepgram", ""),
+    ("Hume AI", ""), ("Stability AI", ""), ("Lightning AI", ""), ("Predibase", ""),
+    ("Arize AI", ""), ("Fiddler AI", ""), ("Humanloop", ""), ("LlamaIndex", ""),
+    ("Twelve Labs", ""), ("Poolside", ""), ("Augment Code", ""), ("Codeium", ""),
+    ("Sourcegraph", ""), ("Zed Industries", ""), ("Imbue", ""), ("Typeface", ""),
+    ("Jasper", ""), ("Decagon", ""), ("Cognition Labs", ""), ("Mercor", ""),
+    ("EvenUp", ""), ("Abridge", ""), ("OpenEvidence", ""), ("Ideogram", ""),
+    # --- More dev tools / data / infra ---
+    ("Railway", ""), ("Northflank", ""), ("Gitpod", ""), ("Depot", ""),
+    ("Turso", ""), ("Xata", ""), ("Convex", ""), ("Appwrite", ""),
+    ("Hasura", ""), ("Apollo GraphQL", ""), ("Inngest", ""), ("Trigger.dev", ""),
+    ("Resend", ""), ("Liveblocks", ""), ("Ably", ""), ("Novu", ""),
+    ("Hightouch", ""), ("RudderStack", ""), ("Materialize", ""), ("Tinybird", ""),
+    ("Timescale", ""), ("Cockroach Labs", ""), ("EdgeDB", ""), ("WarpStream", ""),
+    ("Redpanda", ""), ("Hex Technologies", ""), ("Sigma Computing", ""),
+    ("Metabase", ""), ("Preset", ""), ("Estuary", ""), ("Tecton", ""),
+    # --- More SaaS / product / HR / ops ---
+    ("Coda", ""), ("Lattice", ""), ("Culture Amp", ""), ("15Five", ""),
+    ("HiBob", ""), ("Oyster HR", ""), ("Metaview", ""), ("Pave", ""),
+    ("Assembled", ""), ("Sprig", ""), ("Dovetail", ""), ("Pendo", ""),
+    ("Productboard", ""), ("Shortcut", ""), ("Superhuman", ""), ("Loom", ""),
+    ("Verkada", ""), ("Ironclad", ""),
+    # --- More fintech / payments / risk ---
+    ("Wise", ""), ("Lithic", ""), ("Highnote", ""), ("Moov", ""),
+    ("Finix", ""), ("Airwallex", ""), ("Sardine", ""), ("Unit21", ""),
+    ("Middesk", ""), ("Truework", ""), ("Argyle", ""), ("Method Financial", ""),
+    ("Sila", ""), ("Treasury Prime", ""), ("Mercoa", ""), ("Checkout.com", ""),
+    ("Klarna", ""),
+    # --- Healthtech ---
+    ("Cedar", ""), ("Oscar Health", ""), ("Hims & Hers", ""),
+    ("Cityblock Health", ""), ("Carbon Health", ""), ("Maven Clinic", ""),
+    ("Spring Health", ""), ("Lyra Health", ""), ("Headway", ""), ("Tempus", ""),
+    ("Flatiron Health", ""), ("Komodo Health", ""), ("Cohere Health", ""),
+    ("Suki AI", ""), ("Garner Health", ""), ("Sword Health", ""),
+    ("Hinge Health", ""), ("Devoted Health", ""), ("Clipboard Health", ""),
+    ("Aledade", ""), ("Included Health", ""), ("Commure", ""),
+    # --- Commerce / logistics / marketplaces ---
+    ("Faire", ""), ("Whatnot", ""), ("StockX", ""), ("Poshmark", ""),
+    ("ThredUp", ""), ("Gopuff", ""), ("Toast", ""), ("Olo", ""),
+    ("Shippo", ""), ("ShipBob", ""), ("Stord", ""), ("Project44", ""),
+    ("FourKites", ""),
+    # --- More security ---
+    ("Material Security", ""), ("Sublime Security", ""), ("Endor Labs", ""),
+    ("Aikido Security", ""), ("Nightfall AI", ""), ("Cyera", ""),
+    ("GitGuardian", ""), ("Sysdig", ""), ("Aqua Security", ""),
+    ("Orca Security", ""), ("JupiterOne", ""),
 ]
 
 BOARD_URLS = {
