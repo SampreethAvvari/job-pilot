@@ -16,10 +16,10 @@ export function AssistantDrawer({ job, onClose }: { job: Job; onClose: () => voi
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end"
-         style={{ background: "rgba(0,0,0,0.55)" }}
+         style={{ background: "rgba(29, 29, 31, 0.32)" }}
          onClick={onClose}>
-      <div className="h-full w-full max-w-2xl overflow-y-auto p-4 rise"
-           style={{ background: "var(--ink)", borderLeft: "1px solid var(--line)" }}
+      <div className="card rise h-full w-full max-w-2xl overflow-y-auto p-4"
+           style={{ borderRadius: 0, boxShadow: "var(--shadow-lg)" }}
            onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <div>

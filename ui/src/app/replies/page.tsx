@@ -14,7 +14,7 @@ export default async function RepliesPage() {
       <div className="mb-5">
         <div className="eyebrow">comms</div>
         <h1 className="display mt-1 text-2xl font-extrabold tracking-tight">Replies</h1>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-dim)" }}>
+        <p className="mt-1 text-xs" style={{ color: "var(--ink-55)" }}>
           The scanner reads your inbox each run, matches recruiter emails to tracked
           applications, and moves status forward. Your manual edits always win, use
           the Class dropdown to correct a misread, or remove a non-reply entirely.
