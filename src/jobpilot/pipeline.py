@@ -197,9 +197,15 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
             print(note)
         return scored
 
-    from jobpilot import knowledge
+    from jobpilot import archiver, knowledge
     from jobpilot.outreach import auto_outreach
     from jobpilot.tailor import auto_tailor, make_tailor_llm
+
+    # Nightly aging sweep: full runs only (fast/console-refresh already returned
+    # above). Runs before tailoring/outreach so their per-run compute caps are
+    # spent on rows that survive as fresh and actionable, not ones about to be
+    # archived; its note is folded into `notes`, which reaches tonight's digest.
+    notes.extend(archiver.sweep(creds, sid, cfg, now))
 
     tailor_llm = make_tailor_llm(cfg)
     notes.extend(auto_tailor(creds, sid, cfg, tailor_llm, now))
