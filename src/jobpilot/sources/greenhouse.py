@@ -27,7 +27,7 @@ def fetch(sc: SourceCfg, cfg: Config, client: httpx.Client) -> list[Posting]:
                     location=(job.get("location") or {}).get("name", ""),
                     url=job.get("absolute_url", ""),
                     source="greenhouse",
-                    posted_at=parse_dt(job.get("first_published") or job.get("updated_at")),
+                    posted_at=parse_dt(job.get("first_published")),
                     description=strip_html(job.get("content", "")),
                 )
             )

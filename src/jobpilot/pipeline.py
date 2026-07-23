@@ -15,6 +15,7 @@ from jobpilot.config import Config
 from jobpilot.models import Posting, posted_age
 from jobpilot.scorer import Scored, make_gemini_llm, score
 from jobpilot.sources import SourceSkipped, registry
+from jobpilot.sources import common as sources_common
 
 
 def _stub_llm(prompt: str) -> str:
@@ -93,8 +94,8 @@ def is_non_us(location: str) -> bool:
 
 
 def quality_filter(postings: list[Posting], cfg: Config, now: datetime) -> list[Posting]:
-    """Drop stale postings, excluded seniority/role words, non-US locations,
-    and citizenship/clearance JDs."""
+    """Drop undated/stale postings, excluded seniority/role words, non-US
+    locations, and citizenship/clearance JDs."""
     from jobpilot.companies import ATS_SOURCES
 
     cutoff = now - timedelta(days=cfg.caps.freshness_days)
@@ -103,7 +104,15 @@ def quality_filter(postings: list[Posting], cfg: Config, now: datetime) -> list[
     out = []
     for p in postings:
         limit = board_cutoff if p.source in ATS_SOURCES else cutoff
-        if p.posted_at and p.posted_at < limit:
+        if p.posted_at is None:
+            # No trustworthy date, no entry: the job never reaches dedup memory,
+            # so a later run that does get a date can still admit it.
+            sources_common.RUN_STATS["dropped_undated"] = (
+                sources_common.RUN_STATS.get("dropped_undated", 0) + 1)
+            continue
+        if p.posted_at < limit:
+            sources_common.RUN_STATS["dropped_stale"] = (
+                sources_common.RUN_STATS.get("dropped_stale", 0) + 1)
             continue
         if cfg.us_only and is_non_us(p.location):
             continue
@@ -120,9 +129,12 @@ def quality_filter(postings: list[Posting], cfg: Config, now: datetime) -> list[
 def _apply_quality_filter(postings: list[Posting], cfg: Config, now: datetime,
                           notes: list[str]) -> list[Posting]:
     fresh = quality_filter(postings, cfg, now)
+    stats = sources_common.RUN_STATS
     notes.append(
         f"freshness/seniority filter: kept {len(fresh)} of {len(postings)} "
-        f"(window {cfg.caps.freshness_days}d)"
+        f"(windows {cfg.caps.freshness_days}d/{cfg.caps.board_freshness_days}d board, "
+        f"dropped undated {stats.get('dropped_undated', 0)}, "
+        f"stale {stats.get('dropped_stale', 0)})"
     )
     return fresh
 
@@ -145,7 +157,6 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
 
     from jobpilot import companies, inboxwatch, resolver
     from jobpilot.gauth import credentials, inbox_credentials
-    from jobpilot.sources import common as sources_common
 
     creds = credentials()
     sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
