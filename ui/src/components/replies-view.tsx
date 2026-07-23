@@ -18,7 +18,7 @@ const CLASS_OPTIONS = [
   { value: "next_step", label: "next step" },
   { value: "automated_ack", label: "automated ack" },
   { value: "rejection", label: "rejection" },
-  { value: NOT_A_REPLY, label: "not a reply — remove" },
+  { value: NOT_A_REPLY, label: "not a reply, remove" },
 ];
 
 /** Sheet updates for a manual reclassification, mirroring pipeline semantics:
@@ -64,7 +64,7 @@ export function RepliesView({ initial }: { initial: Job[] }) {
     try {
       await pushUpdate(job.row, updates);
     } catch {
-      setError("Update failed — reload the page and try again.");
+      setError("Update failed. Reload the page and try again.");
     }
   }
 
@@ -140,7 +140,7 @@ function ReplyCard({
           onChange={(e) => onReclassify(job, e.target.value)}
         >
           {!CLASS_OPTIONS.some((o) => o.value === job.replyClass) && (
-            <option value="">{job.replyClass || "—"}</option>
+            <option value="">{job.replyClass || "·"}</option>
           )}
           {CLASS_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>

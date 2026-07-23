@@ -88,7 +88,7 @@ export function JobsProvider({
       setJobs((js) => js.map((j) => (j.row === row ? { ...j, ...local } : j)));
       pushUpdate(row, sheet).catch(() => {
         setJobs((js) => js.map((j) => (j.row === row && prevRow ? prevRow : j)));
-        setError("Save failed — change reverted. Try again.");
+        setError("Save failed. Change reverted, try again.");
         setTimeout(() => setError(""), 5000);
       });
     },
