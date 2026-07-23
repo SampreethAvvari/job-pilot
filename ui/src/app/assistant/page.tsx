@@ -15,7 +15,7 @@ export default async function AssistantPage({
         <div className="eyebrow">copilot</div>
         <h1 className="display mt-1 text-2xl font-extrabold tracking-tight">Assistant</h1>
         <p className="mt-1 text-xs" style={{ color: "var(--ink-55)" }}>
-          Grounded in your resumes, GitHub, portfolio, and the Knowledge tab —
+          Grounded in your resumes, GitHub, portfolio, and the Knowledge tab,
           and nothing else. Resume rewrites, cover letters, and application
           answers only; finished PDFs run through the same ATS-checked pipeline
           as auto-tailoring.

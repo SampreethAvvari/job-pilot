@@ -11,7 +11,7 @@ export function postedTs(posted: string): number {
  * "Posted age" column, which goes stale the moment a row is written. */
 export function liveAge(posted: string): string {
   const ts = postedTs(posted);
-  if (!ts) return "—";
+  if (!ts) return "·";
   const hours = Math.max(0, (Date.now() - ts) / 3600_000);
   if (hours < 1) return `${Math.round(hours * 60)}m ago`;
   if (hours < 24) return `${Math.round(hours)}h ago`;

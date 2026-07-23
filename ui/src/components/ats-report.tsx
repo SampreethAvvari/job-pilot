@@ -219,7 +219,7 @@ export function AtsBadge({ job }: { job: Job }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="eyebrow">tailoring report · ATS {job.resumeAts}</div>
-            <div className="display mt-1 text-lg font-bold">
+            <div className="mt-1 text-lg font-bold" style={{ fontFamily: "var(--font-archivo)" }}>
               {job.title}
             </div>
             <div className="text-xs" style={{ color: "var(--ink-55)" }}>
