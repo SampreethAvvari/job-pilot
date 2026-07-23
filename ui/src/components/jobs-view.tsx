@@ -6,16 +6,23 @@
 // Task 9: 75 fit floor, a 14 day posted window, and posted-recency sort.
 //
 // Interaction handlers (dismiss / apply / tailor / draft / ask / status) are
-// Task 10. This view renders cards with no handlers, so each card falls back
-// to its inert no-op default. Only the read-side busy flags are wired here so
-// the tailoring / drafting states animate off the shared store.
+// Task 10, wired here off the shared store. The flows are ported from the
+// pre-redesign jobs-table.tsx (the semantics reference):
+//   - dismiss + undo toast: optimistic mutate, revert via the toast action
+//   - apply: openPosting + window-focus confirm modal (old lines 100-112, 174-178, 444-487)
+//   - tailor / draft: markBusy + POST + pollUntil for the value change (old lines 59-98)
+//   - status select: setStatusManual with the Applied date stamp (old lines 180-186)
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import JobCard from "./job-card";
+import { AssistantDrawer } from "./assistant-drawer";
 import { FilterBar, Segmented } from "./ui/filter-bar";
 import EmptyState from "./ui/empty-state";
 import Skeleton from "./ui/skeleton";
+import Modal from "./ui/modal";
+import Button from "./ui/button";
+import { useToast } from "./ui/toast";
 import { useJobs } from "./jobs-store";
 import {
   MIN_FIT,
@@ -27,6 +34,7 @@ import {
 import { companySize, SIZE_BUCKETS } from "@/lib/company-size";
 import { isApplied } from "@/lib/status-sets";
 import { ROLES, STATUSES } from "@/lib/types";
+import type { Job } from "@/lib/types";
 
 type Mode = "open" | "applied";
 type SortKey = "recent" | "fit" | "found";
@@ -59,6 +67,11 @@ const SORT_OPTIONS = [
   { value: "found", label: "newest found" },
 ];
 
+/** Local date stamp, YYYY-MM-DD. Ported from jobs-table.tsx:24-26. */
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function SkeletonCard() {
   return (
     <div className="card flex flex-col gap-3 p-5">
@@ -86,7 +99,8 @@ export default function JobsView({
   resumeLinks = {},
   companyAliases,
 }: JobsViewProps) {
-  const { jobs, busyTailor, busyDraft, error } = useJobs();
+  const { jobs, busyTailor, busyDraft, error, mutate, markBusy, pollUntil } = useJobs();
+  const toast = useToast();
 
   // The store seeds synchronously from the server payload, so a populated
   // list never flashes skeletons. `loaded` only guards the genuinely-empty
@@ -107,6 +121,94 @@ export default function JobsView({
   const [minFit, setMinFit] = useState(mode === "open" ? MIN_FIT : 0);
   const [postedWithin, setPostedWithin] = useState(mode === "open" ? 336 : 0);
   const [sortBy, setSortBy] = useState<SortKey>("recent");
+
+  // Apply flow: the posting opens in a new tab, and one job at a time is held
+  // in `pendingRef`. When the window regains focus we surface the confirm
+  // modal for that job. Only one pending confirm exists at a time — opening a
+  // second posting replaces the first — so the single focus listener never
+  // stacks confirms (ported from jobs-table.tsx:52-53,100-112,174-178).
+  const pendingRef = useRef<Job | null>(null);
+  const [confirmJob, setConfirmJob] = useState<Job | null>(null);
+  const [chatJob, setChatJob] = useState<Job | null>(null);
+
+  useEffect(() => {
+    const onFocus = () => {
+      if (pendingRef.current) {
+        setConfirmJob(pendingRef.current);
+        pendingRef.current = null;
+      }
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
+  // Optimistic status -> Dismissed with a "dismissed: not relevant" note; the
+  // card leaves the grid at once (the `visible` memo excludes Dismissed). The
+  // toast's Undo restores the prior status and clears the note.
+  function dismiss(job: Job) {
+    const prev = job.status;
+    mutate(
+      job.row,
+      { status: "Dismissed" },
+      { Status: "Dismissed", Notes: "dismissed: not relevant" },
+    );
+    toast({
+      message: `Dismissed ${job.company}. It will not come back.`,
+      actionLabel: "Undo",
+      onAction: () => mutate(job.row, { status: prev }, { Status: prev, Notes: "" }),
+    });
+  }
+
+  function openPosting(job: Job) {
+    pendingRef.current = job;
+    window.open(job.url, "_blank", "noopener");
+  }
+
+  function confirmApplied(job: Job) {
+    const d = job.appliedDate || today();
+    mutate(
+      job.row,
+      { status: "Applied", appliedDate: d },
+      { Status: "Applied", "Applied date": d },
+    );
+    setConfirmJob(null);
+  }
+
+  // Fire the trigger POST, mark the row busy, then poll for the value CHANGE.
+  // Waiting for a change (not just presence) lets a retry on a FAILED row
+  // resolve when the marker flips (ported from jobs-table.tsx:90-96).
+  function tailor(job: Job) {
+    const before = job.tailoredResume;
+    markBusy("tailor", job.row);
+    fetch("/api/tailor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: job.id }),
+    }).catch(() => {});
+    pollUntil(job.row, "tailor", (j) => Boolean(j.tailoredResume) && j.tailoredResume !== before);
+  }
+
+  function draft(job: Job) {
+    markBusy("draft", job.row);
+    fetch("/api/outreach", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: job.id }),
+    }).catch(() => {});
+    pollUntil(job.row, "draft", (j) => Boolean(j.draft));
+  }
+
+  // Manual status change; moving to Applied stamps today's date once
+  // (ported from jobs-table.tsx:180-186).
+  function setStatusManual(job: Job, v: string) {
+    const stampDate = v === "Applied" && !job.appliedDate;
+    const extra: Record<string, string> = stampDate ? { "Applied date": today() } : {};
+    mutate(
+      job.row,
+      { status: v, appliedDate: stampDate ? today() : job.appliedDate },
+      { Status: v, ...extra },
+    );
+  }
 
   const scoped = useMemo(() => {
     if (!companyAliases) return jobs;
@@ -297,9 +399,49 @@ export default function JobsView({
               resumeLinks={resumeLinks}
               busyTailor={busyTailor.has(j.row)}
               busyDraft={busyDraft.has(j.row)}
+              onDismiss={dismiss}
+              onApply={openPosting}
+              onTailor={tailor}
+              onDraft={draft}
+              onAsk={setChatJob}
+              onStatus={setStatusManual}
             />
           ))}
         </div>
+      )}
+
+      <Modal open={confirmJob !== null} onClose={() => setConfirmJob(null)} width={420}>
+        {confirmJob && (
+          <div>
+            <p className="eyebrow">confirm application</p>
+            <h2
+              className="mt-2 font-semibold"
+              style={{ fontFamily: "var(--font-archivo)", fontSize: 20, color: "var(--ink)" }}
+            >
+              Did you apply to {confirmJob.company}?
+            </h2>
+            <p className="mt-1 text-[13px]" style={{ color: "var(--ink-55)" }}>
+              {[confirmJob.title, confirmJob.location].filter(Boolean).join(" · ")}
+            </p>
+            <div className="mt-5 flex gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                autoFocus
+                onClick={() => confirmApplied(confirmJob)}
+              >
+                Yes, applied
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmJob(null)}>
+                Not yet
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {chatJob && (
+        <AssistantDrawer key={chatJob.id} job={chatJob} onClose={() => setChatJob(null)} />
       )}
     </div>
   );
