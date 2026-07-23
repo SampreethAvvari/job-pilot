@@ -41,6 +41,8 @@ def _publish_secret(variant: str, tex: str) -> None:
 
 def rebuild_master(creds, spreadsheet_id: str, variant: str, cfg: Config,
                    llm: Callable[[str], str], now: datetime) -> str:
+    if variant != "AIE":
+        return f"rebuild skipped: single master mode, only AIE is maintained (got {variant})"
     current_tex = os.environ.get(f"RESUME_TEX_{variant}")
     if not current_tex:
         return f"rebuild FAILED: RESUME_TEX_{variant} not mounted"

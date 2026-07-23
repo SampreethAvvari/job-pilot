@@ -32,9 +32,19 @@ def test_prompt_contains_jd_and_resume():
 
 
 def test_resume_env_override(monkeypatch):
-    monkeypatch.setenv("RESUME_TEX_MLE", "\\name{REAL PERSON} private content")
+    # Single-master mode: the AIE env base is the only one consulted, whatever
+    # variant the caller passes.
+    monkeypatch.setenv("RESUME_TEX_AIE", "\\name{REAL PERSON} private content")
     p = _build_prompt("Acme", "ML Engineer", "desc", "MLE")
     assert "REAL PERSON" in p
+
+
+def test_tailor_base_is_always_aie(monkeypatch):
+    from jobpilot import tailor
+    monkeypatch.setenv("RESUME_TEX_AIE", "AIE MASTER CONTENT")
+    monkeypatch.setenv("RESUME_TEX_FDE", "FDE CONTENT")
+    prompt = tailor._build_prompt("Acme", "Platform Engineer", "jd text", "FDE")
+    assert "AIE MASTER CONTENT" in prompt and "FDE CONTENT" not in prompt
 
 
 def test_generate_happy_path():
