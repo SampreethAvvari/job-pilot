@@ -11,10 +11,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from jobpilot.sheets import HEADERS, LAST_COL, _svc
+from jobpilot.sheets import HEADERS, LAST_COL, _svc, col_letter
 
 _IDX = {name: i for i, name in enumerate(HEADERS)}
 _PROTECTED = {"Applied", "Outreach sent", "Response", "Interview", "Offer"}
+_JOB_ID_COL = col_letter(_IDX["Job ID"])
 
 
 def _parse(ts: str, fmt: str) -> datetime | None:
@@ -82,6 +83,27 @@ def select_archivable(rows: list[list[str]], now: datetime, min_fit: int,
     return out
 
 
+def _delete_ranges(indexes: list[int]) -> list[tuple[int, int]]:
+    """Coalesce 0-based Jobs data-row indexes into contiguous deleteDimension
+    (startIndex, endIndex) ranges, highest first.
+
+    A data index's deleteDimension row (0-based, header included) is index+1;
+    endIndex is exclusive, so a contiguous run from a to b becomes
+    (a + 1, b + 2). Highest-first ordering means deleting one range never
+    shifts the row numbers a range still to come refers to. This is what
+    keeps a ~4,300-row migration to a handful of deleteDimension requests in
+    one batchUpdate instead of one request per row (a real server-side
+    timeout/failure risk at that size).
+    """
+    ranges: list[tuple[int, int]] = []
+    for i in sorted(indexes):
+        if ranges and i == ranges[-1][1] - 1:
+            ranges[-1] = (ranges[-1][0], i + 2)
+        else:
+            ranges.append((i + 1, i + 2))
+    return list(reversed(ranges))
+
+
 def sweep(creds, spreadsheet_id: str, cfg, now: datetime) -> list[str]:
     """Move archivable Jobs rows to Archive, then delete them from Jobs.
 
@@ -93,7 +115,8 @@ def sweep(creds, spreadsheet_id: str, cfg, now: datetime) -> list[str]:
     rather than risk removing the wrong row. An aborted delete leaves a
     duplicate copy sitting in Archive until the next sweep succeeds, which is
     harmless: known_ids() unions Jobs and Archive, so a duplicate there never
-    resurfaces a job as "new".
+    resurfaces a job as "new". The delete itself is one batchUpdate of
+    coalesced ranges (see _delete_ranges), not one request per row.
     """
     svc = _svc(creds)
     resp = svc.spreadsheets().values().get(
@@ -114,7 +137,8 @@ def sweep(creds, spreadsheet_id: str, cfg, now: datetime) -> list[str]:
     # Re-verify ids straight before deleting: a concurrent append cannot shift
     # existing row indexes, but a concurrent manual edit could.
     check = svc.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id, range="Jobs!B2:B").execute().get("values", [])
+        spreadsheetId=spreadsheet_id,
+        range=f"Jobs!{_JOB_ID_COL}2:{_JOB_ID_COL}").execute().get("values", [])
     stale_check = [
         i for i, _ in picks
         if i >= len(check) or (check[i][0] if check[i] else "") != _cell(rows[i], "Job ID")
@@ -133,8 +157,8 @@ def sweep(creds, spreadsheet_id: str, cfg, now: datetime) -> list[str]:
     requests = [
         {"deleteDimension": {"range": {
             "sheetId": jobs_sheet_id, "dimension": "ROWS",
-            "startIndex": i + 1, "endIndex": i + 2}}}
-        for i, _ in sorted(picks, key=lambda t: t[0], reverse=True)
+            "startIndex": start, "endIndex": end}}}
+        for start, end in _delete_ranges([i for i, _ in picks])
     ]
     svc.spreadsheets().batchUpdate(
         spreadsheetId=spreadsheet_id, body={"requests": requests}).execute()

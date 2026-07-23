@@ -62,10 +62,8 @@ def test_manual_rows_exempt_from_fit_and_date_until_aged():
     assert got == [(1, "manual aged out")]
 
 
-# ---------- select_archivable edge cases (self-review: empty tab, full
-
-
-# _PROTECTED set, unknown-status conservative default) ----------
+# ---------- select_archivable edge cases (empty tab, full _PROTECTED set,
+# unknown-status conservative default) ----------
 
 
 def test_select_archivable_empty_rows_returns_empty():
@@ -87,6 +85,33 @@ def test_unknown_status_is_left_alone_conservative_default():
     assert select_archivable([row], NOW, 75, 14) == []
 
 
+# ---------- _delete_ranges (pure) ----------
+
+
+def test_delete_ranges_single_row():
+    assert archiver._delete_ranges([5]) == [(6, 7)]
+
+
+def test_delete_ranges_one_long_contiguous_run_becomes_one_range():
+    assert archiver._delete_ranges([0, 1, 2, 3, 4]) == [(1, 6)]
+
+
+def test_delete_ranges_mixed_runs_and_singletons_emit_descending():
+    # The reviewer's own example: a contiguous run [1,2,3] plus a singleton
+    # [7] coalesce to two ranges, highest first.
+    assert archiver._delete_ranges([1, 2, 3, 7]) == [(8, 9), (2, 5)]
+
+
+def test_delete_ranges_empty_list():
+    assert archiver._delete_ranges([]) == []
+
+
+def test_delete_ranges_sorts_unsorted_input():
+    # sweep() always hands this ascending picks (select_archivable iterates
+    # rows in order), but the pure function shouldn't rely on that.
+    assert archiver._delete_ranges([7, 1, 3, 2]) == [(8, 9), (2, 5)]
+
+
 # ---------- sweep (I/O) ----------
 
 
@@ -103,11 +128,13 @@ class _FakeValues:
     call order (1st = initial Jobs read, 2nd = Job ID re-verify read); append()
     records what sweep() sent to Archive."""
 
-    def __init__(self, get_sequence, appended):
+    def __init__(self, get_sequence, appended, get_calls):
         self._get_sequence = list(get_sequence)
         self._appended = appended
+        self._get_calls = get_calls
 
     def get(self, spreadsheetId, range):
+        self._get_calls.append(range)
         return _Result(self._get_sequence.pop(0))
 
     def append(self, spreadsheetId, range, valueInputOption, insertDataOption, body):
@@ -123,7 +150,8 @@ class _FakeSweepSvc:
     def __init__(self, get_sequence, jobs_sheet_id=42):
         self.appended: list = []
         self.batch_requests = None
-        self._values = _FakeValues(get_sequence, self.appended)
+        self.get_calls: list = []
+        self._values = _FakeValues(get_sequence, self.appended, self.get_calls)
         self._jobs_sheet_id = jobs_sheet_id
 
     def spreadsheets(self):
@@ -169,11 +197,13 @@ def test_sweep_nothing_to_move_leaves_sheet_untouched(monkeypatch):
     assert fake.appended == [] and fake.batch_requests is None
 
 
-def test_sweep_moves_and_deletes_bottom_up_using_real_jobs_sheet_id(monkeypatch):
+def test_sweep_moves_and_deletes_coalesced_ranges_using_real_jobs_sheet_id(monkeypatch):
     rows = [
-        _row(job_id="keep"),                              # kept: fresh, high fit
-        _row(status="Dismissed", job_id="row-b"),          # archived: dismissed
-        _row(posted="2026-06-01 08:00", job_id="row-c"),   # archived: stale
+        _row(job_id="keep-0"),                              # 0: kept, fresh
+        _row(status="Dismissed", job_id="row-1"),           # 1: archived (dismissed)
+        _row(posted="2026-06-01 08:00", job_id="row-2"),    # 2: archived (stale) — contiguous with 1
+        _row(job_id="keep-3"),                              # 3: kept, fresh
+        _row(status="Dismissed", job_id="row-4"),           # 4: archived (dismissed) — singleton
     ]
     check = [[r[H["Job ID"]]] for r in rows]  # unchanged ids: recheck matches
     fake = _FakeSweepSvc(get_sequence=[{"values": rows}, {"values": check}],
@@ -182,16 +212,20 @@ def test_sweep_moves_and_deletes_bottom_up_using_real_jobs_sheet_id(monkeypatch)
 
     notes = archiver.sweep(None, "sid", _cfg75(), NOW)
 
-    assert notes == ["archive sweep: moved 2 rows (1 dismissed, 1 stale)"]
+    assert notes == ["archive sweep: moved 3 rows (2 dismissed, 1 stale)"]
     assert fake.appended[0][0] == "Archive!A1"
-    assert [v[H["Job ID"]] for v in fake.appended[0][1]] == ["row-b", "row-c"]
-    # bottom-up: higher data index deleted first; sheetId from meta, never 0
+    assert [v[H["Job ID"]] for v in fake.appended[0][1]] == ["row-1", "row-2", "row-4"]
+    # indexes 1,2 are contiguous -> one coalesced range; index 4 stays its own
+    # range; both descending (index 4's range first); sheetId from meta, never 0.
     assert fake.batch_requests == [
         {"deleteDimension": {"range": {
-            "sheetId": 987654, "dimension": "ROWS", "startIndex": 3, "endIndex": 4}}},
+            "sheetId": 987654, "dimension": "ROWS", "startIndex": 5, "endIndex": 6}}},
         {"deleteDimension": {"range": {
-            "sheetId": 987654, "dimension": "ROWS", "startIndex": 2, "endIndex": 3}}},
+            "sheetId": 987654, "dimension": "ROWS", "startIndex": 2, "endIndex": 4}}},
     ]
+    # recheck column is derived from the header map (col_letter(_IDX["Job ID"])),
+    # not hand-typed — this locks in that it still resolves to "B".
+    assert fake.get_calls == ["Jobs!A2:AB", "Jobs!B2:B"]
 
 
 def test_sweep_aborts_delete_on_concurrent_edit_but_keeps_archive_copy(monkeypatch):
@@ -206,6 +240,20 @@ def test_sweep_aborts_delete_on_concurrent_edit_but_keeps_archive_copy(monkeypat
     assert "aborted delete" in notes[0] and "1 mismatches" in notes[0]
     assert len(fake.appended) == 1  # Archive copy already made before the abort
     assert fake.batch_requests is None  # delete never sent
+
+
+def test_sweep_aborts_delete_when_recheck_is_shorter_than_picks(monkeypatch):
+    # Concurrent row deletion (not just an edit) makes the recheck list come
+    # back shorter than the original read — the i >= len(check) branch.
+    rows = [_row(status="Dismissed", job_id="only-row")]
+    check: list = []
+    fake = _FakeSweepSvc(get_sequence=[{"values": rows}, {"values": check}])
+    monkeypatch.setattr(archiver, "_svc", lambda creds: fake)
+
+    notes = archiver.sweep(None, "sid", _cfg75(), NOW)
+
+    assert "aborted delete" in notes[0]
+    assert fake.batch_requests is None
 
 
 def test_sweep_pads_short_rows_to_full_width_before_archiving(monkeypatch):
