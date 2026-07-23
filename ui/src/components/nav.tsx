@@ -38,11 +38,14 @@ export function Nav() {
       {LINKS.map((l) => (
         <Link key={l.href} href={l.href}
               className={`navlink ${path === l.href ? "active" : ""}`}>
-          <span aria-hidden>{l.glyph}</span>
+          <span aria-hidden className="font-mono text-[13px] leading-none">{l.glyph}</span>
           {l.label}
           {l.href === "/applied" && appliedCount !== null && (
-            <span className="ml-auto text-[11px]" style={{ color: "var(--green)" }}>
-              ({appliedCount})
+            <span
+              className="ml-auto rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none"
+              style={{ background: "var(--blue-soft)", color: "var(--blue)" }}
+            >
+              {appliedCount}
             </span>
           )}
         </Link>
