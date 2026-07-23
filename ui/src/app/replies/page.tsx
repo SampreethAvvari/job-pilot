@@ -1,5 +1,5 @@
 import { readJobs } from "@/lib/jobs";
-import { RepliesTable } from "@/components/replies-table";
+import { RepliesView } from "@/components/replies-view";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export default async function RepliesPage() {
         </p>
       </div>
 
-      <RepliesTable initial={replies} />
+      <RepliesView initial={replies} />
     </div>
   );
 }
