@@ -43,6 +43,8 @@ def rebuild_master(creds, spreadsheet_id: str, variant: str, cfg: Config,
                    llm: Callable[[str], str], now: datetime) -> str:
     if variant != "AIE":
         return f"rebuild skipped: single master mode, only AIE is maintained (got {variant})"
+    # Past this guard variant is always "AIE", so the per-variant parameters below
+    # (RESUME_TEX_<V>, KEYWORDS[<V>], pdf_ids[<V>]) all resolve to the AIE master.
     current_tex = os.environ.get(f"RESUME_TEX_{variant}")
     if not current_tex:
         return f"rebuild FAILED: RESUME_TEX_{variant} not mounted"
