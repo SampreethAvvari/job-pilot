@@ -13,6 +13,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -46,6 +47,9 @@ export function JobsProvider({
   const [error, setError] = useState("");
   const [busyTailor, setBusyTailor] = useState<Set<number>>(new Set());
   const [busyDraft, setBusyDraft] = useState<Set<number>>(new Set());
+  // Active pollUntil interval handles, so the provider can clear every
+  // outstanding timer on unmount instead of letting them run past it.
+  const pollTimers = useRef<Set<ReturnType<typeof setInterval>>>(new Set());
 
   const refresh = useCallback(async () => {
     try {
@@ -59,17 +63,31 @@ export function JobsProvider({
   // Single 60s poller for the whole console — was five independent ones.
   useEffect(() => {
     const t = setInterval(refresh, 60_000);
-    return () => clearInterval(t);
+    return () => {
+      clearInterval(t);
+      // Intentionally reading the ref's live value at cleanup time, not a
+      // snapshot from when this effect ran: pollTimers is a mutable timer
+      // registry (populated later by pollUntil calls), not a DOM node ref,
+      // so we want whatever is outstanding right now.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      const timers = pollTimers.current;
+      for (const handle of timers) clearInterval(handle);
+      timers.clear();
+    };
   }, [refresh]);
 
-  // Exact port of jobs-table.tsx:159-167 — optimistic update, revert +
-  // banner on failure.
+  // Optimistic update, revert + banner on failure — ported from
+  // jobs-table.tsx:159-167, but the revert now targets only the mutated
+  // row (functionally, via setJobs(js => ...)) so it composes with
+  // concurrent edits — e.g. the 60s refresh or another row's own mutate —
+  // landing in between, instead of clobbering the whole array back to a
+  // stale snapshot.
   const mutate = useCallback(
     (row: number, local: Partial<Job>, sheet: Record<string, string>) => {
-      const prev = jobs;
+      const prevRow = jobs.find((j) => j.row === row);
       setJobs((js) => js.map((j) => (j.row === row ? { ...j, ...local } : j)));
       pushUpdate(row, sheet).catch(() => {
-        setJobs(prev);
+        setJobs((js) => js.map((j) => (j.row === row && prevRow ? prevRow : j)));
         setError("Save failed — change reverted. Try again.");
         setTimeout(() => setError(""), 5000);
       });
@@ -89,9 +107,13 @@ export function JobsProvider({
     (row: number, col: BusyKind, predicate: (j: Job) => boolean) => {
       const setBusy = col === "tailor" ? setBusyTailor : setBusyDraft;
       const started = Date.now();
+      const stop = () => {
+        clearInterval(t);
+        pollTimers.current.delete(t);
+      };
       const t = setInterval(async () => {
         if (Date.now() - started > 4 * 60_000) {
-          clearInterval(t);
+          stop();
           setBusy((s) => {
             const n = new Set(s);
             n.delete(row);
@@ -103,7 +125,7 @@ export function JobsProvider({
           const d = await (await fetch("/api/jobs")).json();
           const fresh = (d.jobs as Job[] | undefined)?.find((x) => x.row === row);
           if (fresh && predicate(fresh)) {
-            clearInterval(t);
+            stop();
             setJobs((js) => js.map((x) => (x.row === row ? { ...x, ...fresh } : x)));
             setBusy((s) => {
               const n = new Set(s);
@@ -115,6 +137,7 @@ export function JobsProvider({
           /* keep polling */
         }
       }, 15_000);
+      pollTimers.current.add(t);
     },
     [],
   );
