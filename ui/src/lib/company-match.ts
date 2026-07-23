@@ -58,6 +58,21 @@ export function effectiveRecency(j: Job): number {
   return 0;
 }
 
+/** Posted within the last `hours` (default 24) — drives the "new" badge.
+ *  Kept here, beside the other clock-reading helpers, so components stay pure
+ *  (calling Date.now() straight in a render body trips react-hooks/purity). */
+export function isFreshPost(posted: string, hours = 24): boolean {
+  const ts = postedTs(posted);
+  return ts > 0 && Date.now() - ts <= hours * 3600_000;
+}
+
+/** Job falls inside a rolling recency window of `hours`, by effectiveRecency
+ *  (real posted time, or dateFound for manual rows). Unknown-age rows fail. */
+export function withinRecency(j: Job, hours: number): boolean {
+  const ts = effectiveRecency(j);
+  return ts !== 0 && Date.now() - ts <= hours * 3600_000;
+}
+
 /** Still waiting for the user's action AND relevant. Applied/Outreach/Response/
  * Interview/Offer/Rejected/Dismissed or low-fit jobs drop out of the count. */
 export function isRemaining(j: Job): boolean {
