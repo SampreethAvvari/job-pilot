@@ -161,6 +161,7 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
     creds = credentials()
     sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
     sid = sheets.ensure_dashboard(creds, sid)
+    sheets.ensure_archive_tab(creds, sid)
 
     watchlist = companies.load(creds, sid)
     resolver_notes = resolver.resolve_pending(watchlist)
@@ -179,7 +180,9 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
     new = dedup.filter_new(postings, sheets.known_ids(creds, sid))
     notes.append(f"dedup: {len(new)} new of {len(postings)} fetched")
     scored = score(new, cfg, llm)
-    sheets.append_jobs(creds, sid, scored, now)
+    n_jobs, n_archived = sheets.append_jobs(creds, sid, scored, now,
+                                            min_fit=cfg.scoring.threshold)
+    notes.append(f"write gate: {n_jobs} to Jobs, {n_archived} archived low fit")
     n_matches = sum(1 for s in scored if (s.fit_score or 0) >= cfg.scoring.threshold)
 
     watch_llm = make_gemini_llm(cfg, schema=inboxwatch.FindingBatch)
