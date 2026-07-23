@@ -180,10 +180,15 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
     new = dedup.filter_new(postings, sheets.known_ids(creds, sid))
     notes.append(f"dedup: {len(new)} new of {len(postings)} fetched")
     scored = score(new, cfg, llm)
+    # route_jobs is the single source of truth for the Jobs/Archive split, so
+    # n_matches and the digest below can never describe a job that append_jobs
+    # actually routed to Archive (e.g. a high-fit sponsorship auto-reject).
+    to_jobs, _ = sheets.route_jobs(scored, cfg.scoring.threshold)
     n_jobs, n_archived = sheets.append_jobs(creds, sid, scored, now,
                                             min_fit=cfg.scoring.threshold)
-    notes.append(f"write gate: {n_jobs} to Jobs, {n_archived} archived low fit")
-    n_matches = sum(1 for s in scored if (s.fit_score or 0) >= cfg.scoring.threshold)
+    notes.append(f"write gate: {n_jobs} to Jobs, {n_archived} archived "
+                f"(low fit or auto-rejected)")
+    n_matches = len(to_jobs)
 
     watch_llm = make_gemini_llm(cfg, schema=inboxwatch.FindingBatch)
     watch_notes = inboxwatch.watch(creds, inbox_credentials(), sid, cfg, watch_llm, now)
@@ -206,12 +211,15 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
     # spent on rows that survive as fresh and actionable, not ones about to be
     # archived; its note is folded into `notes`, which reaches tonight's digest.
     notes.extend(archiver.sweep(creds, sid, cfg, now))
+    sheets.refresh_stats(creds, sid)  # live tab decays to literal zeros otherwise
 
     tailor_llm = make_tailor_llm(cfg)
     notes.extend(auto_tailor(creds, sid, cfg, tailor_llm, now))
     notes.extend(auto_outreach(creds, sid, cfg, tailor_llm, now))
     notes.extend(knowledge.refresh(creds, sid, cfg, now))  # keeps the Assistant grounded
-    html = digest.build_html(scored, sheets.url_for(sid), now, cfg.scoring.threshold, notes)
+    # Only the Jobs-bound list: the digest must describe what the owner will
+    # actually see in the Jobs tab, not rows route_jobs sent to Archive.
+    html = digest.build_html(to_jobs, sheets.url_for(sid), now, cfg.scoring.threshold, notes)
     digest.send(creds, cfg, html, now, n_matches)
     print(f"run complete: {len(scored)} new jobs, {n_matches} matches, sheet {sid}")
     return scored

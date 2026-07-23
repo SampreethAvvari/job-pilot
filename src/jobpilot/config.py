@@ -36,13 +36,13 @@ class SourceCfg(_Strict):
 
 
 class Scoring(_Strict):
-    threshold: int = 60
+    threshold: int = 75
     model: str = "gemini-flash-latest"
 
 
 class Tailoring(_Strict):
     enabled: bool = True
-    auto_threshold: int = 60  # auto-tailor jobs scoring at/above this
+    auto_threshold: int = 75  # auto-tailor jobs scoring at/above this
     max_per_run: int = 15  # compute cap per pipeline run
     attempts: int = 10  # judge-driven rewrite loop: best of up to N attempts
     drive_folder: str = "JobPilot Resumes/Tailored"

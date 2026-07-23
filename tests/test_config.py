@@ -32,7 +32,7 @@ def _write(tmp_path: Path, text: str) -> Path:
 def test_loads_valid_config(tmp_path):
     cfg = Config.load(_write(tmp_path, VALID))
     assert cfg.profile.sponsorship_needed is True
-    assert cfg.scoring.threshold == 60  # default
+    assert cfg.scoring.threshold == 75  # default
     assert cfg.sources["greenhouse"].companies == ["databricks"]
     assert list(cfg.enabled_sources()) == ["greenhouse"]
 
@@ -65,3 +65,9 @@ def test_env_override_wins(tmp_path, monkeypatch):
 def test_caps_per_company_default(tmp_path):
     cfg = Config.load(_write(tmp_path, VALID))
     assert cfg.caps.per_company == 25
+
+
+def test_default_thresholds_are_75():
+    from jobpilot.config import Scoring, Tailoring
+    assert Scoring().threshold == 75
+    assert Tailoring().auto_threshold == 75

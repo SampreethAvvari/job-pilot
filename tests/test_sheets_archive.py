@@ -127,6 +127,50 @@ def test_append_jobs_mixed_batch_counts_each_bucket_once(monkeypatch):
     assert (n_jobs, n_archived) == (2, 2)  # D never written at all
 
 
+# ---------- route_jobs (pure) ----------
+
+
+def test_route_jobs_mixed_batch_high_low_unscored_unlikely_sponsorship():
+    high = _scored(90, title="High")
+    low = _scored(60, title="Low")
+    unscored = _scored(None, title="Unscored")
+    unlikely = _scored(99, title="Unlikely", sponsorship="unlikely")
+    to_jobs, to_archive = sheets.route_jobs([high, low, unscored, unlikely], min_fit=75)
+    assert to_jobs == [high]
+    assert to_archive == [low, unlikely]  # unscored appears in neither list
+
+
+def test_route_jobs_fit_equal_to_min_fit_goes_to_jobs():
+    # >= is inclusive: a score exactly at the threshold is a pass, not a miss.
+    s = _scored(75)
+    assert sheets.route_jobs([s], min_fit=75) == ([s], [])
+
+
+def test_route_jobs_empty_list():
+    assert sheets.route_jobs([], min_fit=75) == ([], [])
+
+
+def test_route_jobs_all_unscored_returns_empty_both():
+    to_jobs, to_archive = sheets.route_jobs([_scored(None), _scored(None)], min_fit=75)
+    assert to_jobs == [] and to_archive == []
+
+
+def test_route_jobs_and_append_jobs_agree_on_split_sizes(monkeypatch):
+    # append_jobs must not drift from route_jobs: same inputs, same split sizes,
+    # so pipeline.run()'s n_matches/digest (routed separately) always matches
+    # what actually lands in the Jobs tab.
+    store = {}
+    fake = FakeValues(store)
+    monkeypatch.setattr(sheets, "_svc", lambda creds: _fake_svc(fake))
+    scored = [
+        _scored(90, title="A"), _scored(60, title="B"),
+        _scored(None, title="C"), _scored(99, title="D", sponsorship="unlikely"),
+    ]
+    to_jobs, to_archive = sheets.route_jobs(scored, min_fit=75)
+    n_jobs, n_archived = sheets.append_jobs(None, "sid", scored, NOW, min_fit=75)
+    assert (n_jobs, n_archived) == (len(to_jobs), len(to_archive))
+
+
 # ---------- known_ids ----------
 
 
@@ -247,3 +291,30 @@ def test_ensure_archive_tab_is_idempotent(monkeypatch):
     sheets.ensure_archive_tab(None, "sid")
     assert fake.batch_updates == []
     assert fake.header_writes == []
+
+
+# ---------- STATS_ROWS / refresh_stats ----------
+
+
+def test_stats_rows_lifetime_counts_include_archive_active_counts_dont():
+    formulas = dict(sheets.STATS_ROWS[1:])  # drop the ["Metric", "Value"] header
+    assert "Archive!B2:B" in formulas["Jobs found"]
+    assert "Archive!A2:A" in formulas["Found this week"]
+    for metric in ("Applied", "Responses", "Interviews"):
+        assert "Archive" not in formulas[metric]
+
+
+def test_refresh_stats_rewrites_stats_a1(monkeypatch):
+    calls = []
+
+    class FakeStatsValues:
+        def update(self, spreadsheetId, range, valueInputOption, body):
+            calls.append((spreadsheetId, range, valueInputOption, body))
+            return self
+
+        def execute(self):
+            return {}
+
+    monkeypatch.setattr(sheets, "_svc", lambda creds: _fake_svc(FakeStatsValues()))
+    sheets.refresh_stats(None, "sid")
+    assert calls == [("sid", "Stats!A1", "USER_ENTERED", {"values": sheets.STATS_ROWS})]

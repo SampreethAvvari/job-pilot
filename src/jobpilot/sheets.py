@@ -36,7 +36,7 @@ STATUS_VALUES = [
 ]
 STATS_ROWS = [
     ["Metric", "Value"],
-    ["Jobs found", "=COUNTA(Jobs!B2:B)"],
+    ["Jobs found", "=COUNTA(Jobs!B2:B)+COUNTA(Archive!B2:B)"],
     ["Applied", '=COUNTIF(Jobs!O2:O,"Applied")+COUNTIF(Jobs!O2:O,"Outreach sent")'
                 '+COUNTIF(Jobs!O2:O,"Response")+COUNTIF(Jobs!O2:O,"Interview")'
                 '+COUNTIF(Jobs!O2:O,"Offer")'],
@@ -44,7 +44,8 @@ STATS_ROWS = [
                   '+COUNTIF(Jobs!O2:O,"Offer")'],
     ["Interviews", '=COUNTIF(Jobs!O2:O,"Interview")+COUNTIF(Jobs!O2:O,"Offer")'],
     ["Response rate", "=IFERROR(B4/B3,0)"],
-    ["Found this week", '=COUNTIF(Jobs!A2:A,">="&TEXT(TODAY()-7,"yyyy-mm-dd"))'],
+    ["Found this week", '=COUNTIF(Jobs!A2:A,">="&TEXT(TODAY()-7,"yyyy-mm-dd"))'
+                        '+COUNTIF(Archive!A2:A,">="&TEXT(TODAY()-7,"yyyy-mm-dd"))'],
 ]
 
 
@@ -163,6 +164,14 @@ def ensure_dashboard(creds, spreadsheet_id: str) -> str:
     return sid
 
 
+def refresh_stats(creds, spreadsheet_id: str) -> None:
+    """Rewrite the Stats formulas; the live tab has decayed to literal zeros."""
+    _svc(creds).spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="Stats!A1",
+        valueInputOption="USER_ENTERED", body={"values": STATS_ROWS},
+    ).execute()
+
+
 def ensure_archive_tab(creds, spreadsheet_id: str) -> None:
     """Archive holds aged out, low fit, and dismissed rows. Same HEADERS as
     Jobs, so dedup can recompute keys from Title+Company there too."""
@@ -212,30 +221,52 @@ def known_ids(creds, spreadsheet_id: str) -> set[str]:
     }
 
 
-def append_jobs(creds, spreadsheet_id: str, scored: list[Scored], now: datetime,
-                min_fit: int) -> tuple[int, int]:
-    """Split scored rows at the fit gate: fit_score >= min_fit goes to Jobs,
-    everything else lands in Archive. Sponsorship "unlikely" auto-rejects go to
-    Archive regardless of fit score, keeping the Status/Notes to_row already
-    set for them; genuine low-fit rows get Status "Low fit" instead. Unscored
-    rows (fit_score is None) are skipped entirely, so they retry next run,
-    since a row that's never written never enters dedup memory.
+def route_jobs(scored: list[Scored], min_fit: int) -> tuple[list[Scored], list[Scored]]:
+    """Split scored jobs the way the sheet writes them: (to Jobs, to Archive).
 
-    Returns (n_jobs, n_archived).
+    Sponsorship "unlikely" auto-rejects route to Archive regardless of fit
+    score (checked first, so a high fit score never saves one); everything
+    else scoring below min_fit also routes to Archive. Unscored jobs
+    (fit_score is None) appear in neither list, so they retry next run
+    instead of getting stuck as a dead dedup key.
+
+    This is the single source of truth for the Jobs/Archive split: both
+    append_jobs (what gets written) and pipeline.run (n_matches and the
+    digest shortlist) call it, so the digest can never describe a job that
+    isn't actually in the Jobs tab.
     """
-    jobs_rows, archive_rows = [], []
+    to_jobs, to_archive = [], []
     for s in scored:
         if s.fit_score is None:
             continue
+        if s.sponsorship_signal == "unlikely" or s.fit_score < min_fit:
+            to_archive.append(s)
+        else:
+            to_jobs.append(s)
+    return to_jobs, to_archive
+
+
+def append_jobs(creds, spreadsheet_id: str, scored: list[Scored], now: datetime,
+                min_fit: int) -> tuple[int, int]:
+    """Write scored rows the way route_jobs splits them: the Jobs-bound jobs to
+    Jobs, the Archive-bound jobs to Archive. Archived rows keep the Status
+    "Rejected" / Notes "auto-rejected: sponsorship unlikely" that to_row
+    already set for sponsorship auto-rejects; genuine low-fit rows get
+    relabeled Status "Low fit" instead. Unscored rows (fit_score is None)
+    never reach either list, so they retry next run, since a row that's
+    never written never enters dedup memory.
+
+    Returns (n_jobs, n_archived).
+    """
+    to_jobs, to_archive = route_jobs(scored, min_fit)
+    jobs_rows = [to_row(s, now) for s in to_jobs]
+    archive_rows = []
+    for s in to_archive:
         row = to_row(s, now)
-        if s.sponsorship_signal == "unlikely":
-            archive_rows.append(row)  # keep the Rejected status/note to_row set
-        elif s.fit_score < min_fit:
+        if s.sponsorship_signal != "unlikely":
             row[14] = "Low fit"
             row[15] = f"below write threshold {min_fit}"
-            archive_rows.append(row)
-        else:
-            jobs_rows.append(row)
+        archive_rows.append(row)
     if not jobs_rows and not archive_rows:
         return 0, 0
     svc = _svc(creds)
