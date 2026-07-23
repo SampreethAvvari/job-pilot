@@ -17,7 +17,7 @@ export default async function OutreachPage() {
       <div className="mb-5">
         <div className="eyebrow">cold outreach</div>
         <h1 className="display mt-1 text-2xl font-extrabold tracking-tight">Outreach</h1>
-        <p className="mt-1 text-xs" style={{ color: "var(--text-dim)" }}>
+        <p className="mt-1 text-xs" style={{ color: "var(--ink-55)" }}>
           Search a company. JobPilot picks your best-fit resume, writes a short,
           plain-English cold email, builds a tailored cover letter, finds the right
           people via Hunter (when a key is set), and drops a draft in your Gmail tagged
