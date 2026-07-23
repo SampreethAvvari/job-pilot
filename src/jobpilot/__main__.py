@@ -31,6 +31,8 @@ def main() -> None:
                         help="fetch+score+record only (console refresh)")
     parser.add_argument("--inbox-watch", action="store_true",
                         help="check watched inboxes for replies and alert (skips pipeline)")
+    parser.add_argument("--archive-sweep", action="store_true",
+                        help="run only the archive sweep against the sheet")
     parser.add_argument("--refresh-knowledge", action="store_true",
                         help="rebuild the Assistant knowledge pack (skips pipeline)")
     parser.add_argument("--rebuild-resume", default="",
@@ -52,6 +54,20 @@ def main() -> None:
         llm = make_gemini_llm(cfg, schema=inboxwatch.FindingBatch)
         for note in inboxwatch.watch(creds, inbox_credentials(), sid, cfg, llm,
                                      datetime.now(timezone.utc)):
+            print(note)
+        return
+
+    if args.archive_sweep:
+        import os
+        from datetime import datetime, timezone
+
+        from jobpilot import archiver, sheets
+        from jobpilot.gauth import credentials
+
+        creds = credentials()
+        sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
+        sheets.ensure_archive_tab(creds, sid)
+        for note in archiver.sweep(creds, sid, cfg, datetime.now(timezone.utc)):
             print(note)
         return
 

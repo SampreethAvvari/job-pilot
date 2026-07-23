@@ -1,6 +1,6 @@
 // Client-safe types and constants (no googleapis imports here).
 
-// Must mirror src/jobpilot/sheets.py HEADERS exactly (columns A..S).
+// Must mirror src/jobpilot/sheets.py HEADERS exactly (columns A..AB).
 export const HEADERS = [
   "Date found", "Job ID", "Title", "Company", "Location", "Remote", "Posted",
   "Posted age", "URL", "Source", "Fit", "Why", "Sponsorship", "Resume variant",
@@ -10,8 +10,6 @@ export const HEADERS = [
 ] as const;
 
 export const ROLES = ["FDE", "AIE", "MLE", "DE", "DS", "SWE", "Other"] as const;
-// The four master resumes a job can be matched to (scorer's resume_variant).
-export const RESUME_VARIANTS = ["FDE", "AIE", "MLE", "SDE"] as const;
 
 // 0-based column index -> A1 letters (0->A, 25->Z, 26->AA).
 export function colLetter(idx: number): string {

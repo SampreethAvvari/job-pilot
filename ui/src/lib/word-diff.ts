@@ -1,4 +1,4 @@
-// Word-level LCS diff for the tailoring report panel: which words of the
+// Word-level LCS diff for the tailoring report: which words of the
 // tailored text are new vs the baseline. Pure, no deps.
 
 export type DiffSeg = { text: string; added: boolean };

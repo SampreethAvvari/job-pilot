@@ -1,6 +1,7 @@
 import { readJobs } from "@/lib/jobs";
 import { resumeLinksFromEnv } from "@/lib/resume-links";
-import { JobsTable } from "@/components/jobs-table";
+import { JobsProvider } from "@/components/jobs-store";
+import JobsView from "@/components/jobs-view";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,9 @@ export default async function JobsPage() {
         <div className="eyebrow">registry</div>
         <h1 className="display mt-1 text-2xl font-extrabold tracking-tight">All jobs</h1>
       </div>
-      <JobsTable initial={jobs} mode="open" resumeLinks={resumeLinks} />
+      <JobsProvider initial={jobs}>
+        <JobsView mode="open" resumeLinks={resumeLinks} />
+      </JobsProvider>
     </div>
   );
 }

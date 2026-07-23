@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import Button from "@/components/ui/button";
+
 type State = "idle" | "starting" | "running" | "done" | "failed";
 
 export function RefreshButton() {
@@ -68,17 +70,15 @@ export function RefreshButton() {
   const label = {
     idle: "⟳ Refresh jobs",
     starting: "Starting…",
-    running: `Fetching fresh jobs… ${elapsed}m (takes ~3-6m)`,
-    done: "✓ Done — new jobs in",
+    running: `Fetching fresh jobs… ${elapsed}m (takes ~3 to 6 min)`,
+    done: "✓ Done. New jobs are in.",
     failed: "✗ Run failed",
   }[state];
 
   return (
-    <button onClick={trigger} disabled={busy}
-            className="btn-amber px-4 py-1.5 text-xs"
-            title="Fetch + score fresh jobs from all sources now">
-      {busy && <span className="blink mr-1">●</span>}
+    <Button variant="ghost" size="sm" onClick={trigger} busy={busy}
+            title="Fetch and score fresh jobs from all sources now">
       {label}
-    </button>
+    </Button>
   );
 }

@@ -3,21 +3,79 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 import { readJobs, type Job } from "@/lib/jobs";
-import { FitMeter, StatusPill } from "@/components/status";
+import { resumeLinksFromEnv } from "@/lib/resume-links";
+import { MIN_FIT } from "@/lib/company-match";
+import { APPLIED_SET, RESPONDED_SET } from "@/lib/status-sets";
+import { JobsProvider } from "@/components/jobs-store";
+import FreshMatches from "@/components/fresh-matches";
+import Card from "@/components/ui/card";
+import EmptyState from "@/components/ui/empty-state";
+import { StatusPill } from "@/components/status";
 
-const ADVANCED = new Set(["Applied", "Outreach sent", "Response", "Interview", "Offer"]);
-const RESPONDED = new Set(["Response", "Interview", "Offer"]);
+// Kept in sync with FreshMatches' own filter (fresh-matches.tsx) — this
+// number is display copy only, the actual gate lives with the component
+// that owns the data.
+const FRESH_HOURS = 72;
 
-function Tile({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function StatTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
   return (
-    <div className="panel px-4 py-3">
+    <Card className="flex min-h-[92px] flex-col justify-between px-4 py-3">
       <div className="eyebrow">{label}</div>
-      <div className="display mt-1 text-2xl font-extrabold"
-           style={accent ? { color: "var(--amber)" } : undefined}>
+      <div
+        className="mt-1 text-[26px] font-extrabold leading-none tracking-tight"
+        style={{ fontFamily: "var(--font-archivo)", color: tone ?? "var(--ink)" }}
+      >
         {value}
       </div>
+    </Card>
+  );
+}
+
+function SectionHeading({
+  eyebrow,
+  title,
+  href,
+  hrefLabel,
+}: {
+  eyebrow: string;
+  title: string;
+  href?: string;
+  hrefLabel?: string;
+}) {
+  return (
+    <div className="mb-3 flex items-baseline justify-between gap-3">
+      <div>
+        <div className="eyebrow">{eyebrow}</div>
+        <h2
+          className="mt-1 text-lg font-bold"
+          style={{ fontFamily: "var(--font-archivo)", color: "var(--ink)" }}
+        >
+          {title}
+        </h2>
+      </div>
+      {href && (
+        <Link href={href} className="eyebrow shrink-0 hover:text-[var(--blue)]">
+          {hrefLabel} →
+        </Link>
+      )}
     </div>
   );
+}
+
+/** Whole days since a "YYYY-MM-DD" stamp; Infinity when unparseable so it
+ * never accidentally counts as "this week". */
+function daysAgo(dateStr: string): number {
+  const t = Date.parse(dateStr);
+  if (Number.isNaN(t)) return Infinity;
+  return (Date.now() - t) / 86_400_000;
 }
 
 export default async function Dashboard() {
@@ -29,15 +87,30 @@ export default async function Dashboard() {
     loadError = String(e);
   }
 
-  const applied = jobs.filter((j) => ADVANCED.has(j.status));
-  const responses = jobs.filter((j) => RESPONDED.has(j.status));
-  const interviews = jobs.filter((j) => ["Interview", "Offer"].includes(j.status));
-  const rate = applied.length ? Math.round((responses.length / applied.length) * 100) : 0;
+  if (loadError) {
+    return (
+      <div className="rise space-y-6">
+        <div>
+          <div className="eyebrow">mission control</div>
+          <h1 className="mt-1 text-3xl font-extrabold tracking-tight" style={{ fontFamily: "var(--font-archivo)" }}>
+            The hunt, <span style={{ color: "var(--blue)" }}>quantified</span>
+          </h1>
+        </div>
+        <EmptyState
+          title="Could not load the sheet"
+          hint="The Jobs sheet did not respond. Refresh in a minute, or check the service account's access."
+        />
+      </div>
+    );
+  }
 
-  const top = jobs
-    .filter((j) => (j.status === "New" || !j.status) && (j.fit ?? 0) >= 60)
-    .sort((a, b) => (b.fit ?? 0) - (a.fit ?? 0))
-    .slice(0, 8);
+  const resumeLinks = resumeLinksFromEnv();
+
+  const applied = jobs.filter((j) => APPLIED_SET.has(j.status));
+  const responses = jobs.filter((j) => RESPONDED_SET.has(j.status));
+  const interviews = jobs.filter((j) => j.status === "Interview" || j.status === "Offer");
+  const rate = applied.length ? Math.round((responses.length / applied.length) * 100) : 0;
+  const foundThisWeek = jobs.filter((j) => daysAgo(j.dateFound) <= 7).length;
 
   const replies = jobs
     .filter((j) => j.lastReply)
@@ -45,85 +118,61 @@ export default async function Dashboard() {
     .slice(0, 5);
 
   return (
-    <div className="rise space-y-6">
+    <div className="rise space-y-8">
       <div>
-        <div className="eyebrow">mission status</div>
-        <h1 className="display mt-1 text-3xl font-extrabold tracking-tight">
-          The hunt, <span style={{ color: "var(--amber)" }}>quantified.</span>
+        <div className="eyebrow">mission control</div>
+        <h1 className="mt-1 text-3xl font-extrabold tracking-tight" style={{ fontFamily: "var(--font-archivo)" }}>
+          The hunt, <span style={{ color: "var(--blue)" }}>quantified</span>
         </h1>
       </div>
 
-      {loadError && (
-        <div className="panel px-4 py-3 text-xs" style={{ color: "var(--red)" }}>
-          Could not load the sheet: {loadError}
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <Tile label="jobs found" value={String(jobs.length)} />
-        <Tile label="applied" value={String(applied.length)} accent />
-        <Tile label="responses" value={String(responses.length)} />
-        <Tile label="interviews" value={String(interviews.length)} />
-        <Tile label="response rate" value={`${rate}%`} />
-      </div>
-
       <section>
-        <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="display text-lg font-bold">Top open matches</h2>
-          <Link href="/jobs" className="eyebrow hover:text-[var(--amber)]">
-            all jobs →
-          </Link>
-        </div>
-        <div className="panel overflow-x-auto">
-          <table className="console-table">
-            <thead>
-              <tr><th>Fit</th><th>Role</th><th>Company</th><th>Posted</th><th>Sponsor</th></tr>
-            </thead>
-            <tbody>
-              {top.map((j) => (
-                <tr key={j.row}>
-                  <td><FitMeter fit={j.fit} /></td>
-                  <td>
-                    <a className="font-semibold hover:underline" href={j.url}
-                       target="_blank" rel="noopener">{j.title}</a>
-                  </td>
-                  <td>{j.company}</td>
-                  <td style={{ color: "var(--text-dim)" }}>{j.postedAge}</td>
-                  <td>{j.sponsorship}</td>
-                </tr>
-              ))}
-              {top.length === 0 && (
-                <tr><td colSpan={5} className="py-8 text-center"
-                        style={{ color: "var(--text-faint)" }}>
-                  Nothing new above threshold — hit Refresh jobs.
-                </td></tr>
-              )}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <StatTile label="applied" value={String(applied.length)} />
+          <StatTile label="responses" value={String(responses.length)} tone="var(--amber)" />
+          <StatTile label="interviews" value={String(interviews.length)} tone="var(--emerald)" />
+          <StatTile label="response rate" value={`${rate}%`} tone="var(--blue)" />
+          <StatTile label="found this week" value={String(foundThisWeek)} tone="var(--violet)" />
         </div>
       </section>
 
       <section>
-        <h2 className="display mb-2 text-lg font-bold">Latest replies</h2>
-        <div className="panel divide-y" style={{ borderColor: "var(--line-soft)" }}>
-          {replies.map((j) => (
-            <div key={j.row} className="flex items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <div className="truncate font-semibold">{j.company} — {j.title}</div>
-                <div className="text-[11px]" style={{ color: "var(--text-faint)" }}>
-                  {j.lastReply} · {j.replyClass}
-                </div>
-              </div>
-              <StatusPill status={j.status} />
-            </div>
-          ))}
-          {replies.length === 0 && (
-            <div className="px-4 py-8 text-center text-xs" style={{ color: "var(--text-faint)" }}>
-              No replies tracked yet — they appear automatically once the scanner sees
+        <SectionHeading
+          eyebrow={`fit ${MIN_FIT}+ · last ${FRESH_HOURS} hours`}
+          title="Fresh matches"
+          href="/jobs"
+          hrefLabel="all jobs"
+        />
+        <JobsProvider initial={jobs}>
+          <FreshMatches resumeLinks={resumeLinks} />
+        </JobsProvider>
+      </section>
+
+      <section>
+        <SectionHeading eyebrow="signal" title="Latest replies" />
+        <Card className="divide-y divide-[var(--line)]">
+          {replies.length === 0 ? (
+            <div className="px-4 py-10 text-center text-[13px]" style={{ color: "var(--ink-55)" }}>
+              No replies tracked yet. They appear automatically once the scanner sees
               recruiter emails.
             </div>
+          ) : (
+            replies.map((j) => (
+              <div key={j.row} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold" style={{ color: "var(--ink)" }}>
+                    {j.company} · {j.title}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px]" style={{ color: "var(--ink-35)" }}>
+                    <span className="font-mono">{j.lastReply}</span>
+                    {j.replyClass && <span>· {j.replyClass}</span>}
+                  </div>
+                </div>
+                <StatusPill status={j.status} />
+              </div>
+            ))
           )}
-        </div>
+        </Card>
       </section>
     </div>
   );

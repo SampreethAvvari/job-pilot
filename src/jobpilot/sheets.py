@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from jobpilot.models import posted_age
 from jobpilot.scorer import Scored
@@ -35,7 +36,7 @@ STATUS_VALUES = [
 ]
 STATS_ROWS = [
     ["Metric", "Value"],
-    ["Jobs found", "=COUNTA(Jobs!B2:B)"],
+    ["Jobs found", "=COUNTA(Jobs!B2:B)+COUNTA(Archive!B2:B)"],
     ["Applied", '=COUNTIF(Jobs!O2:O,"Applied")+COUNTIF(Jobs!O2:O,"Outreach sent")'
                 '+COUNTIF(Jobs!O2:O,"Response")+COUNTIF(Jobs!O2:O,"Interview")'
                 '+COUNTIF(Jobs!O2:O,"Offer")'],
@@ -43,7 +44,8 @@ STATS_ROWS = [
                   '+COUNTIF(Jobs!O2:O,"Offer")'],
     ["Interviews", '=COUNTIF(Jobs!O2:O,"Interview")+COUNTIF(Jobs!O2:O,"Offer")'],
     ["Response rate", "=IFERROR(B4/B3,0)"],
-    ["Found this week", '=COUNTIF(Jobs!A2:A,">="&TEXT(TODAY()-7,"yyyy-mm-dd"))'],
+    ["Found this week", '=COUNTIF(Jobs!A2:A,">="&TEXT(TODAY()-7,"yyyy-mm-dd"))'
+                        '+COUNTIF(Archive!A2:A,">="&TEXT(TODAY()-7,"yyyy-mm-dd"))'],
 ]
 
 
@@ -162,38 +164,120 @@ def ensure_dashboard(creds, spreadsheet_id: str) -> str:
     return sid
 
 
+def refresh_stats(creds, spreadsheet_id: str) -> None:
+    """Rewrite the Stats formulas; the live tab has decayed to literal zeros."""
+    _svc(creds).spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="Stats!A1",
+        valueInputOption="USER_ENTERED", body={"values": STATS_ROWS},
+    ).execute()
+
+
+def ensure_archive_tab(creds, spreadsheet_id: str) -> None:
+    """Archive holds aged out, low fit, and dismissed rows. Same HEADERS as
+    Jobs, so dedup can recompute keys from Title+Company there too."""
+    svc = _svc(creds)
+    meta = svc.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    titles = [s["properties"]["title"] for s in meta["sheets"]]
+    if "Archive" in titles:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": "Archive"}}}]},
+    ).execute()
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="Archive!A1",
+        valueInputOption="RAW", body={"values": [HEADERS]},
+    ).execute()
+
+
 def known_ids(creds, spreadsheet_id: str) -> set[str]:
     """Dedup keys recomputed from Title+Company — NOT the stored Job ID column.
 
     Stored ids written before BL-20 hashed location into the key, so matching
     against them would re-add every already-seen job under the new scheme.
+
+    Unions Jobs and Archive, so a job that aged out or scored below the write
+    threshold is still remembered and never comes back as "new."
     """
     from jobpilot import dedup
 
-    resp = (
-        _svc(creds)
-        .spreadsheets()
-        .values()
-        .get(spreadsheetId=spreadsheet_id, range="Jobs!C2:D")
-        .execute()
-    )
+    svc = _svc(creds)
+
+    def _pairs(tab: str) -> list[list[str]]:
+        resp = svc.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id, range=f"{tab}!C2:D").execute()
+        return resp.get("values", [])
+
+    jobs_pairs = _pairs("Jobs")  # a real failure here is a real error: let it raise
+    try:
+        archive_pairs = _pairs("Archive")
+    except HttpError:
+        archive_pairs = []  # a hand-deleted tab degrades instead of crashing the run
+
     return {
         dedup.key(company=row[1], title=row[0])
-        for row in resp.get("values", [])
+        for row in jobs_pairs + archive_pairs
         if len(row) >= 2
     }
 
 
-def append_jobs(creds, spreadsheet_id: str, scored: list[Scored], now: datetime) -> None:
-    if not scored:
-        return
-    _svc(creds).spreadsheets().values().append(
-        spreadsheetId=spreadsheet_id,
-        range="Jobs!A1",
-        valueInputOption="USER_ENTERED",
-        insertDataOption="INSERT_ROWS",
-        body={"values": [to_row(s, now) for s in scored]},
-    ).execute()
+def route_jobs(scored: list[Scored], min_fit: int) -> tuple[list[Scored], list[Scored]]:
+    """Split scored jobs the way the sheet writes them: (to Jobs, to Archive).
+
+    Sponsorship "unlikely" auto-rejects route to Archive regardless of fit
+    score (checked first, so a high fit score never saves one); everything
+    else scoring below min_fit also routes to Archive. Unscored jobs
+    (fit_score is None) appear in neither list, so they retry next run
+    instead of getting stuck as a dead dedup key.
+
+    This is the single source of truth for the Jobs/Archive split: both
+    append_jobs (what gets written) and pipeline.run (n_matches and the
+    digest shortlist) call it, so the digest can never describe a job that
+    isn't actually in the Jobs tab.
+    """
+    to_jobs, to_archive = [], []
+    for s in scored:
+        if s.fit_score is None:
+            continue
+        if s.sponsorship_signal == "unlikely" or s.fit_score < min_fit:
+            to_archive.append(s)
+        else:
+            to_jobs.append(s)
+    return to_jobs, to_archive
+
+
+def append_jobs(creds, spreadsheet_id: str, scored: list[Scored], now: datetime,
+                min_fit: int) -> tuple[int, int]:
+    """Write scored rows the way route_jobs splits them: the Jobs-bound jobs to
+    Jobs, the Archive-bound jobs to Archive. Archived rows keep the Status
+    "Rejected" / Notes "auto-rejected: sponsorship unlikely" that to_row
+    already set for sponsorship auto-rejects; genuine low-fit rows get
+    relabeled Status "Low fit" instead. Unscored rows (fit_score is None)
+    never reach either list, so they retry next run, since a row that's
+    never written never enters dedup memory.
+
+    Returns (n_jobs, n_archived).
+    """
+    to_jobs, to_archive = route_jobs(scored, min_fit)
+    jobs_rows = [to_row(s, now) for s in to_jobs]
+    archive_rows = []
+    for s in to_archive:
+        row = to_row(s, now)
+        if s.sponsorship_signal != "unlikely":
+            row[14] = "Low fit"
+            row[15] = f"below write threshold {min_fit}"
+        archive_rows.append(row)
+    if not jobs_rows and not archive_rows:
+        return 0, 0
+    svc = _svc(creds)
+    for tab, rows in (("Jobs", jobs_rows), ("Archive", archive_rows)):
+        if rows:
+            svc.spreadsheets().values().append(
+                spreadsheetId=spreadsheet_id, range=f"{tab}!A1",
+                valueInputOption="USER_ENTERED", insertDataOption="INSERT_ROWS",
+                body={"values": rows},
+            ).execute()
+    return len(jobs_rows), len(archive_rows)
 
 
 def url_for(spreadsheet_id: str) -> str:

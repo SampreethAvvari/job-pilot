@@ -20,10 +20,14 @@ def test_profile_section_has_constraints():
     assert "Jane Doe Candidate" in s
 
 
-def test_resumes_section_contains_all_variants():
+def test_resumes_section_renders_single_aie_master():
+    # Single-master mode: the pack grounds on the one AIE base under a single
+    # accurate header, not four identical variant sections.
     s = kn.resumes_section()
-    for v in ("FDE", "MLE", "SDE", "AIE"):
-        assert f"Resume variant {v}" in s
+    assert "Master resume (AIE)" in s
+    assert s.count("factual source of truth") == 1
+    for v in ("Resume variant FDE", "Resume variant MLE", "Resume variant SDE"):
+        assert v not in s
 
 
 def test_github_section_skips_forks_and_caps(httpx_mock):

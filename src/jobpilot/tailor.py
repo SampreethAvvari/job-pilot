@@ -56,15 +56,16 @@ class TailorResult(BaseModel):
 
 
 def _resume_tex(variant: str) -> str:
-    """RESUME_TEX_<VARIANT> env (Secret Manager) wins; repo template is the fallback."""
+    """Every tailored resume derives from the single AIE master (owner decision,
+    2026-07-23 spec). The variant argument survives only as a report label; base
+    selection ignores it. RESUME_TEX_AIE env (Secret Manager) wins; the repo
+    template is the fallback."""
     import os
 
-    env = os.environ.get(f"RESUME_TEX_{variant}")
+    env = os.environ.get("RESUME_TEX_AIE")
     if env:
         return env
-    return (RESUME_DIR / VARIANT_FILES.get(variant, VARIANT_FILES["FDE"])).read_text(
-        encoding="utf-8"
-    )
+    return (RESUME_DIR / VARIANT_FILES["AIE"]).read_text(encoding="utf-8")
 
 
 def _build_prompt(company: str, title: str, description: str, variant: str) -> str:
@@ -158,7 +159,7 @@ def tailor_row(creds, spreadsheet_id: str, row: dict, cfg: Config,
             return run_llm(prompt).tailored_tex
 
         tex, resume_pdf, report, attempts = best_of_attempts(
-            first.tailored_tex, KEYWORDS.get(variant, []), regen,
+            first.tailored_tex, KEYWORDS["AIE"], regen,
             f"{company}_{variant}", max_attempts=cfg.tailoring.attempts)
         result = extras.get(id(tex), first)
         cover_pdf, _ = compile_pdf(result.cover_letter_tex, f"{company}_cover")

@@ -43,13 +43,13 @@ def profile_section(cfg: Config) -> str:
 
 
 def resumes_section() -> str:
-    from jobpilot.tailor import VARIANT_FILES, _resume_tex
+    from jobpilot.tailor import _resume_tex
 
-    parts = []
-    for variant in VARIANT_FILES:
-        parts.append(f"## Resume variant {variant} (LaTeX, factual source of truth)\n"
-                     + _resume_tex(variant))
-    return "\n\n".join(parts)
+    # Single-master mode (2026-07-23): every tailored resume derives from the one
+    # AIE base, so the knowledge pack grounds the Assistant on that master once
+    # rather than repeating identical content under four variant headers.
+    return ("## Master resume (AIE): every tailored resume derives from this base "
+            "(LaTeX, factual source of truth)\n" + _resume_tex("AIE"))
 
 
 def github_section(cfg: Config, client: httpx.Client) -> str:

@@ -1,6 +1,7 @@
 import { readJobs } from "@/lib/jobs";
 import { resumeLinksFromEnv } from "@/lib/resume-links";
-import { JobsTable } from "@/components/jobs-table";
+import { JobsProvider } from "@/components/jobs-store";
+import JobsView from "@/components/jobs-view";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,12 @@ export default async function AppliedPage() {
       <div className="mb-4">
         <div className="eyebrow">in flight</div>
         <h1 className="display mt-1 text-2xl font-extrabold tracking-tight">
-          Applied <span style={{ color: "var(--green)" }}>({count})</span>
+          Applied <span style={{ color: "var(--emerald)" }}>({count})</span>
         </h1>
       </div>
-      <JobsTable initial={jobs} mode="applied" resumeLinks={resumeLinksFromEnv()} />
+      <JobsProvider initial={jobs}>
+        <JobsView mode="applied" resumeLinks={resumeLinksFromEnv()} />
+      </JobsProvider>
     </div>
   );
 }

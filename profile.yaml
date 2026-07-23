@@ -94,12 +94,12 @@ sources:
     max_items: 50   # protects free credits
 
 scoring:
-  threshold: 60
+  threshold: 75
   model: gemini-2.5-flash  # valid on both Vertex AI and AI Studio
 
 tailoring:
   enabled: true
-  auto_threshold: 60   # auto-tailor jobs scoring at/above this
+  auto_threshold: 75   # auto-tailor jobs scoring at/above this
   max_per_run: 15      # compute cap per run
 
 caps:

@@ -36,13 +36,13 @@ class SourceCfg(_Strict):
 
 
 class Scoring(_Strict):
-    threshold: int = 60
+    threshold: int = 75
     model: str = "gemini-flash-latest"
 
 
 class Tailoring(_Strict):
     enabled: bool = True
-    auto_threshold: int = 60  # auto-tailor jobs scoring at/above this
+    auto_threshold: int = 75  # auto-tailor jobs scoring at/above this
     max_per_run: int = 15  # compute cap per pipeline run
     attempts: int = 10  # judge-driven rewrite loop: best of up to N attempts
     drive_folder: str = "JobPilot Resumes/Tailored"
@@ -57,10 +57,10 @@ class Caps(_Strict):
     shortlist: int = 25
     per_source: int = 100
     per_company: int = 25  # max matched jobs per company per run (board sources)
-    freshness_days: int = 7  # drop postings older than this (unknown dates kept)
-    # Direct company boards list a job only while it is open, so age means far
-    # less there than on aggregators full of stale reposts.
-    board_freshness_days: int = 60
+    freshness_days: int = 7  # drop postings older than this
+    # Board sources list a job only while it is open, but the console promises a
+    # fresh list, so boards get 14 days and aggregators keep 7.
+    board_freshness_days: int = 14
 
 
 class SheetCfg(_Strict):
