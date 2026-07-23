@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { findPeopleLinks } from "@/lib/people";
-import { RESUME_VARIANTS, type Outreach } from "@/lib/types";
+import type { Outreach } from "@/lib/types";
 
 type RunState = "RUNNING" | "SUCCEEDED" | "FAILED" | "NONE";
+
+// The four master resumes an outreach draft can be pinned to (unrelated to
+// the jobs table's per-role scoring; kept local now that types.ts no longer
+// exports a shared RESUME_VARIANTS).
+const OUTREACH_RESUME_VARIANTS = ["FDE", "AIE", "MLE", "SDE"] as const;
 
 function statusColor(status: string): string {
   if (status === "Drafted") return "var(--green)";
@@ -106,7 +111,7 @@ export function OutreachConsole({ initial }: { initial: Outreach[] }) {
           onChange={(e) => setVariant(e.target.value)}
         >
           <option value="">resume: auto-pick</option>
-          {RESUME_VARIANTS.map((v) => (
+          {OUTREACH_RESUME_VARIANTS.map((v) => (
             <option key={v} value={v}>
               resume: {v}
             </option>

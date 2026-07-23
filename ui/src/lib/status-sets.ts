@@ -7,3 +7,6 @@ export const APPLIED_SET = new Set([
 export function isApplied(status: string): boolean {
   return APPLIED_SET.has(status);
 }
+
+// A step beyond "applied and waiting" — the company has actually replied.
+export const RESPONDED_SET = new Set(["Response", "Interview", "Offer"]);

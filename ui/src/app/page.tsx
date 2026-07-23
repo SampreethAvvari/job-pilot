@@ -3,10 +3,9 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 import { readJobs, type Job } from "@/lib/jobs";
+import { effectiveRecency, MIN_FIT, passesFit } from "@/lib/company-match";
+import { APPLIED_SET, RESPONDED_SET } from "@/lib/status-sets";
 import { FitMeter, StatusPill } from "@/components/status";
-
-const ADVANCED = new Set(["Applied", "Outreach sent", "Response", "Interview", "Offer"]);
-const RESPONDED = new Set(["Response", "Interview", "Offer"]);
 
 function Tile({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
@@ -29,14 +28,14 @@ export default async function Dashboard() {
     loadError = String(e);
   }
 
-  const applied = jobs.filter((j) => ADVANCED.has(j.status));
-  const responses = jobs.filter((j) => RESPONDED.has(j.status));
+  const applied = jobs.filter((j) => APPLIED_SET.has(j.status));
+  const responses = jobs.filter((j) => RESPONDED_SET.has(j.status));
   const interviews = jobs.filter((j) => ["Interview", "Offer"].includes(j.status));
   const rate = applied.length ? Math.round((responses.length / applied.length) * 100) : 0;
 
   const top = jobs
-    .filter((j) => (j.status === "New" || !j.status) && (j.fit ?? 0) >= 60)
-    .sort((a, b) => (b.fit ?? 0) - (a.fit ?? 0))
+    .filter((j) => (j.status === "New" || !j.status) && passesFit(j, MIN_FIT))
+    .sort((a, b) => (b.fit ?? -1) - (a.fit ?? -1) || effectiveRecency(b) - effectiveRecency(a))
     .slice(0, 8);
 
   const replies = jobs

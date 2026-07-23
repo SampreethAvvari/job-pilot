@@ -36,16 +36,34 @@ export function jobsForCompany(c: Company, jobs: Job[]): Job[] {
   return jobs.filter((j) => aliases.has(norm(j.company)));
 }
 
-/** The console-wide relevance gate: under-70 fit is hidden everywhere.
- * Unscored jobs (manual adds) pass — unknown is not "under 70". */
-export const MIN_FIT = 70;
+/** Console wide relevance gate: below 75 is archived server side; the UI
+ *  enforces the same floor so legacy rows behave until migration runs. */
+export const MIN_FIT = 75;
+
+/** Unscored rows pass only when the owner added them by hand. */
+export function passesFit(j: Job, minFit: number): boolean {
+  if (j.fit === null) return j.source === "manual";
+  return j.fit >= minFit;
+}
+
+/** Sort key: real posted time when known; manual rows fall back to the day
+ *  the owner added them; anything else sinks. */
+export function effectiveRecency(j: Job): number {
+  const p = postedTs(j.posted); // postedTs returns 0 as its own "unknown" sentinel
+  if (p !== 0) return p;
+  if (j.source === "manual") {
+    const t = Date.parse(j.dateFound);
+    return Number.isNaN(t) ? 0 : t;
+  }
+  return 0;
+}
 
 /** Still waiting for the user's action AND relevant. Applied/Outreach/Response/
  * Interview/Offer/Rejected/Dismissed or low-fit jobs drop out of the count. */
 export function isRemaining(j: Job): boolean {
   return (
     (j.status === "" || j.status === "New") &&
-    (j.fit === null || j.fit >= MIN_FIT)
+    passesFit(j, MIN_FIT)
   );
 }
 
