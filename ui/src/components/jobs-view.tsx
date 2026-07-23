@@ -93,34 +93,16 @@ function SkeletonCard() {
   );
 }
 
-export default function JobsView({
-  mode,
-  defaultStatus,
-  resumeLinks = {},
-  companyAliases,
-}: JobsViewProps) {
-  const { jobs, busyTailor, busyDraft, error, mutate, markBusy, pollUntil } = useJobs();
+/**
+ * The interaction handlers (dismiss / apply / tailor / draft / ask status)
+ * shared by every JobCard grid on the console — the full Jobs registry
+ * (JobsView) and the dashboard's Fresh matches rail (fresh-matches.tsx).
+ * Pulled out of JobsView so the two call sites never drift: one hook, one
+ * confirm-modal flow, one set of fetch/poll calls.
+ */
+export function useJobActions() {
+  const { busyTailor, busyDraft, mutate, markBusy, pollUntil } = useJobs();
   const toast = useToast();
-
-  // The store seeds synchronously from the server payload, so a populated
-  // list never flashes skeletons. `loaded` only guards the genuinely-empty
-  // first paint (SSR + hydrate) before we know the list is really empty.
-  // useSyncExternalStore gives the canonical mount flag (false on the server,
-  // true after hydration) without a setState-in-effect.
-  const loaded = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
-
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState(defaultStatus ?? (mode === "open" ? "New" : "all"));
-  const [source, setSource] = useState("all");
-  const [role, setRole] = useState("all");
-  const [size, setSize] = useState("all");
-  const [minFit, setMinFit] = useState(mode === "open" ? MIN_FIT : 0);
-  const [postedWithin, setPostedWithin] = useState(mode === "open" ? 336 : 0);
-  const [sortBy, setSortBy] = useState<SortKey>("recent");
 
   // Apply flow: the posting opens in a new tab, and one job at a time is held
   // in `pendingRef`. When the window regains focus we surface the confirm
@@ -209,6 +191,103 @@ export default function JobsView({
       { Status: v, ...extra },
     );
   }
+
+  return {
+    busyTailor,
+    busyDraft,
+    dismiss,
+    openPosting,
+    confirmApplied,
+    tailor,
+    draft,
+    setStatusManual,
+    confirmJob,
+    setConfirmJob,
+    chatJob,
+    setChatJob,
+  };
+}
+
+/** The "did you apply?" confirm modal, shared by every call site of
+ * `useJobActions` so its copy and layout live in exactly one place. */
+export function ConfirmApplyModal({
+  confirmJob,
+  setConfirmJob,
+  confirmApplied,
+}: {
+  confirmJob: Job | null;
+  setConfirmJob: (job: Job | null) => void;
+  confirmApplied: (job: Job) => void;
+}) {
+  return (
+    <Modal open={confirmJob !== null} onClose={() => setConfirmJob(null)} width={420}>
+      {confirmJob && (
+        <div>
+          <p className="eyebrow">confirm application</p>
+          <h2
+            className="mt-2 font-semibold"
+            style={{ fontFamily: "var(--font-archivo)", fontSize: 20, color: "var(--ink)" }}
+          >
+            Did you apply to {confirmJob.company}?
+          </h2>
+          <p className="mt-1 text-[13px]" style={{ color: "var(--ink-55)" }}>
+            {[confirmJob.title, confirmJob.location].filter(Boolean).join(" · ")}
+          </p>
+          <div className="mt-5 flex gap-2">
+            <Button variant="primary" size="sm" autoFocus onClick={() => confirmApplied(confirmJob)}>
+              Yes, applied
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirmJob(null)}>
+              Not yet
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+export default function JobsView({
+  mode,
+  defaultStatus,
+  resumeLinks = {},
+  companyAliases,
+}: JobsViewProps) {
+  const { jobs, error } = useJobs();
+  const {
+    busyTailor,
+    busyDraft,
+    dismiss,
+    openPosting,
+    confirmApplied,
+    tailor,
+    draft,
+    setStatusManual,
+    confirmJob,
+    setConfirmJob,
+    chatJob,
+    setChatJob,
+  } = useJobActions();
+
+  // The store seeds synchronously from the server payload, so a populated
+  // list never flashes skeletons. `loaded` only guards the genuinely-empty
+  // first paint (SSR + hydrate) before we know the list is really empty.
+  // useSyncExternalStore gives the canonical mount flag (false on the server,
+  // true after hydration) without a setState-in-effect.
+  const loaded = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
+
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState(defaultStatus ?? (mode === "open" ? "New" : "all"));
+  const [source, setSource] = useState("all");
+  const [role, setRole] = useState("all");
+  const [size, setSize] = useState("all");
+  const [minFit, setMinFit] = useState(mode === "open" ? MIN_FIT : 0);
+  const [postedWithin, setPostedWithin] = useState(mode === "open" ? 336 : 0);
+  const [sortBy, setSortBy] = useState<SortKey>("recent");
 
   const scoped = useMemo(() => {
     if (!companyAliases) return jobs;
@@ -410,35 +489,11 @@ export default function JobsView({
         </div>
       )}
 
-      <Modal open={confirmJob !== null} onClose={() => setConfirmJob(null)} width={420}>
-        {confirmJob && (
-          <div>
-            <p className="eyebrow">confirm application</p>
-            <h2
-              className="mt-2 font-semibold"
-              style={{ fontFamily: "var(--font-archivo)", fontSize: 20, color: "var(--ink)" }}
-            >
-              Did you apply to {confirmJob.company}?
-            </h2>
-            <p className="mt-1 text-[13px]" style={{ color: "var(--ink-55)" }}>
-              {[confirmJob.title, confirmJob.location].filter(Boolean).join(" · ")}
-            </p>
-            <div className="mt-5 flex gap-2">
-              <Button
-                variant="primary"
-                size="sm"
-                autoFocus
-                onClick={() => confirmApplied(confirmJob)}
-              >
-                Yes, applied
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setConfirmJob(null)}>
-                Not yet
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      <ConfirmApplyModal
+        confirmJob={confirmJob}
+        setConfirmJob={setConfirmJob}
+        confirmApplied={confirmApplied}
+      />
 
       {chatJob && (
         <AssistantDrawer key={chatJob.id} job={chatJob} onClose={() => setChatJob(null)} />
