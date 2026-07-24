@@ -156,3 +156,74 @@ def test_quality_filter_board_window_is_14_days(base_cfg):
     stale_board = _posting(source="greenhouse", days_old=20)
     kept = pipeline.quality_filter([fresh_board, stale_board], base_cfg, now)
     assert kept == [fresh_board]
+
+
+def _patch_full_run(monkeypatch, calls):
+    """Stub every dependency the full (non-fast) `run()` path touches, past
+    fetch/score/record, so the test can observe call order without hitting
+    Google/Gemini. Returns nothing; mutates `calls` as a side effect."""
+    import jobpilot.archiver as archiver
+    import jobpilot.companies as companies
+    import jobpilot.gauth as gauth
+    import jobpilot.inboxwatch as inboxwatch
+    import jobpilot.knowledge as knowledge
+    import jobpilot.outreach as outreach_mod
+    import jobpilot.portfolio_graph as portfolio_graph
+    import jobpilot.resolver as resolver
+    import jobpilot.tailor as tailor_mod
+
+    monkeypatch.setattr(gauth, "credentials", lambda: "creds")
+    monkeypatch.setattr(gauth, "inbox_credentials", lambda: {})
+    monkeypatch.setattr(pipeline, "fetch_all", lambda cfg, only=None: ([], ["fetch: 0"]))
+    monkeypatch.setattr(pipeline.sheets, "ensure_dashboard", lambda creds, sid: "SID")
+    monkeypatch.setattr(pipeline.sheets, "ensure_archive_tab", lambda creds, sid: None)
+    monkeypatch.setattr(pipeline.sheets, "update_company_rows",
+                        lambda creds, sid, updates: None)
+    monkeypatch.setattr(pipeline.sheets, "known_ids", lambda creds, sid: set())
+    monkeypatch.setattr(pipeline.sheets, "route_jobs", lambda scored, min_fit: (scored, []))
+    monkeypatch.setattr(pipeline.sheets, "append_jobs",
+                        lambda creds, sid, scored, now, min_fit: (0, 0))
+    monkeypatch.setattr(pipeline.sheets, "refresh_stats", lambda creds, sid: None)
+    monkeypatch.setattr(pipeline.sheets, "url_for", lambda sid: "https://sheet.example")
+    monkeypatch.setattr(companies, "load", lambda creds, sid: [])
+    monkeypatch.setattr(companies, "merge_into_sources", lambda cfg, rows: None)
+    monkeypatch.setattr(companies, "status_updates", lambda rows, stats, ts: [])
+    monkeypatch.setattr(resolver, "resolve_pending", lambda rows: [])
+    monkeypatch.setattr(inboxwatch, "watch", lambda *a, **k: [])
+    monkeypatch.setattr(archiver, "sweep", lambda creds, sid, cfg, now: [])
+    monkeypatch.setattr(tailor_mod, "auto_tailor", lambda creds, sid, cfg, llm, now: [])
+    monkeypatch.setattr(tailor_mod, "make_tailor_llm", lambda cfg: (lambda p: ""))
+    monkeypatch.setattr(outreach_mod, "auto_outreach", lambda creds, sid, cfg, llm, now: [])
+    monkeypatch.setattr(pipeline, "make_gemini_llm", lambda cfg, schema=None: (lambda p: "{}"))
+    monkeypatch.setattr(pipeline, "score", lambda postings, cfg, llm: [])
+    monkeypatch.setattr(pipeline.digest, "build_html", lambda *a, **k: "<html></html>")
+    monkeypatch.setattr(pipeline.digest, "send", lambda *a, **k: None)
+
+    def fake_rebuild(creds, sid, cfg_, llm, client, now):
+        calls.append("portfolio_graph")
+        return ["portfolio graph: rebuilt"]
+
+    def fake_knowledge_refresh(creds, sid, cfg_, now):
+        calls.append("knowledge")
+        return ["knowledge: refreshed"]
+
+    monkeypatch.setattr(portfolio_graph, "rebuild", fake_rebuild)
+    monkeypatch.setattr(knowledge, "refresh", fake_knowledge_refresh)
+
+
+def test_full_run_rebuilds_portfolio_graph_before_knowledge_refresh(monkeypatch, base_cfg):
+    calls: list[str] = []
+    _patch_full_run(monkeypatch, calls)
+
+    pipeline.run(base_cfg, dry_run=False, fast=False)
+
+    assert calls == ["portfolio_graph", "knowledge"]
+
+
+def test_fast_run_skips_portfolio_graph_rebuild(monkeypatch, base_cfg):
+    calls: list[str] = []
+    _patch_full_run(monkeypatch, calls)
+
+    pipeline.run(base_cfg, dry_run=False, fast=True)
+
+    assert calls == []

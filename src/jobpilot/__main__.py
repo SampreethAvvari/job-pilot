@@ -35,6 +35,8 @@ def main() -> None:
                         help="run only the archive sweep against the sheet")
     parser.add_argument("--refresh-knowledge", action="store_true",
                         help="rebuild the Assistant knowledge pack (skips pipeline)")
+    parser.add_argument("--rebuild-portfolio-graph", action="store_true",
+                        help="crawl the portfolio and rebuild the knowledge graph")
     parser.add_argument("--rebuild-resume", default="",
                         help="regenerate a master resume variant through the judge loop")
     args = parser.parse_args()
@@ -81,6 +83,26 @@ def main() -> None:
         creds = credentials()
         sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
         for note in knowledge.refresh(creds, sid, cfg, datetime.now(timezone.utc)):
+            print(note)
+        return
+
+    if args.rebuild_portfolio_graph:
+        import os
+        from datetime import datetime, timezone
+
+        import httpx
+
+        from jobpilot import portfolio_graph
+        from jobpilot.gauth import credentials
+        from jobpilot.scorer import make_gemini_llm
+
+        creds = credentials()
+        sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
+        llm = make_gemini_llm(cfg, schema=portfolio_graph.PageExtract)
+        client = httpx.Client(timeout=20, follow_redirects=True,
+                              headers=portfolio_graph.UA)
+        for note in portfolio_graph.rebuild(creds, sid, cfg, llm, client,
+                                            datetime.now(timezone.utc)):
             print(note)
         return
 

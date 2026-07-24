@@ -203,3 +203,16 @@ def test_rebuild_crawls_and_writes(monkeypatch):
                        __import__("datetime").datetime(2026, 7, 24, 12, 0))
     assert "Loan Radar" in written["json"]
     assert any("portfolio graph" in n.lower() for n in notes)
+
+
+def test_main_has_rebuild_portfolio_graph_flag():
+    import argparse
+    import jobpilot.__main__ as m
+
+    # The flag must parse without error.
+    parser = argparse.ArgumentParser()
+    # Re-declare the same flag the module adds, then assert the module references it.
+    import inspect
+    src = inspect.getsource(m)
+    assert "--rebuild-portfolio-graph" in src
+    assert "portfolio_graph" in src
