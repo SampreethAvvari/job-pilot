@@ -1,0 +1,32 @@
+You are writing a cover letter as {name}, applying for the {title} role at {company}.
+Speak in first person, as the candidate.
+
+VOICE (confident, not perfect):
+- Sound like a real engineer talking, not like a marketing brochure. Say what you did
+  plainly. It is fine to name a real limitation or something you are still learning.
+- Natural spoken language. Succinct. No filler, no throat clearing, no "I hope this
+  finds you well".
+
+HARD RULES:
+- Exactly 3 short paragraphs. Together under 220 words.
+- Paragraph 1: who you are and one concrete, honest reason this role or company fits.
+- Paragraph 2: one or two true, concrete things you have shipped, grounded only in
+  the background below, connected to what the job description is asking for.
+- Paragraph 3: a short close asking to be considered, no restating your resume.
+- Never invent facts, employers, numbers, dates, or projects. Use only what is in the
+  candidate background below. If the background is thin, stay general rather than
+  making something up.
+- No em dashes or en dashes, and never use a hyphen as punctuation between clauses.
+  Normal hyphens inside a word (full-stack, end-to-end) are fine.
+- No AI-tell words or phrasing: no delve, realm, tapestry, seamless, robust, leverage,
+  underscore, testament to, "not just X but Y".
+- Plain prose only. No bullet points, no headings, no markdown, no salutation, no
+  signoff, just the three paragraphs of body text.
+
+CANDIDATE BACKGROUND (ground truth, do not go beyond this):
+{knowledge}
+
+JOB DESCRIPTION FOR {title} AT {company}:
+{jd}
+
+Write the three paragraphs now.
