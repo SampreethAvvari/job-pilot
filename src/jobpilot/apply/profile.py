@@ -5,7 +5,15 @@ profile (Secret Manager in prod). Spec: docs/superpowers/specs/2026-07-24-auto-a
 
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel, ConfigDict
+
+# Matches a dollar-anchored salary figure only, e.g. "$150,000", "$150k",
+# "$150K", or "$150000". Deliberately requires a leading "$" so that bare
+# numbers in the JD text (headcount, square footage, phone numbers, IDs)
+# are never mistaken for a salary figure.
+_SALARY_RE = re.compile(r"\$\s?(\d{1,3}(?:,\d{3})+|\d{2,3}\s?[kK]|\d{5,6})")
 
 
 class _Model(BaseModel):
@@ -59,13 +67,17 @@ class Compensation(_Model):
     how_did_you_hear: str = "Company website"
 
     def salary_answer(self, jd_text: str, wants_number: bool) -> str:
-        import re
-
         if not wants_number:
             return self.salary_prefer_text
         if self.use_jd_range_if_present:
-            nums = re.findall(r"\$?\s*(\d{2,3}(?:,\d{3})|\d{5,6})", jd_text or "")
-            vals = [int(n.replace(",", "")) for n in nums]
+            vals = []
+            for raw in _SALARY_RE.findall(jd_text or ""):
+                token = raw.replace(" ", "")
+                if token[-1] in "kK":
+                    val = int(token[:-1]) * 1000
+                else:
+                    val = int(token.replace(",", ""))
+                vals.append(val)
             vals = [v for v in vals if 40000 <= v <= 500000]
             if vals:
                 lo = min(vals)

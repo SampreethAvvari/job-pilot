@@ -79,3 +79,26 @@ def test_salary_number_falls_back_without_jd_range_and_has_no_dash():
     ans = c.salary_answer("no numbers here", wants_number=True)
     assert "130,000" in ans and "140,000" in ans
     assert "-" not in ans and "—" not in ans  # no dash, uses "to"
+
+
+def test_salary_ignores_non_dollar_decoy_numbers():
+    c = _sample().compensation
+    ans = c.salary_answer(
+        "We have 45000 employees and 120000 sq ft of space.", wants_number=True)
+    assert ans == "$130,000 to $140,000"
+
+
+def test_salary_picks_dollar_range_over_decoys():
+    c = _sample().compensation
+    ans = c.salary_answer(
+        "Team of 45000 people, 120000 sq ft. Salary: $150,000 - $170,000.",
+        wants_number=True)
+    assert "150,000" in ans
+    assert "45,000" not in ans
+    assert "120,000" not in ans
+
+
+def test_salary_accepts_k_suffix():
+    c = _sample().compensation
+    ans = c.salary_answer("Comp: $150k base.", wants_number=True)
+    assert "150,000" in ans
