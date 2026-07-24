@@ -279,18 +279,26 @@ def rebuild(creds, sid: str, cfg: Config, llm, client, now: datetime) -> list[st
         extracts = [extract_page(u, t, llm) for u, t in pages]
         graph = build_graph(extracts, [u for u, _ in pages],
                             now.strftime("%Y-%m-%d %H:%M"))
-        sheets.write_portfolio_graph(creds, sid, graph.model_dump_json(),
-                                     now.strftime("%Y-%m-%d %H:%M"))
         n_proj = sum(1 for x in graph.nodes if x.type == "project")
-        notes.append(f"portfolio graph: {len(pages)} pages, {n_proj} projects")
-        try:
-            from jobpilot import tailor
-            drive = tailor._drive(creds)
-            folder = tailor._ensure_folder(drive, "JobPilot Applications")
-            tailor.upload_bytes(creds, folder, "_portfolio_graph.html",
-                                render_html(graph).encode("utf-8"), "text/html")
-        except Exception as exc:  # noqa: BLE001 — optional viewer, never fails the run
-            notes.append(f"portfolio graph html: skipped ({type(exc).__name__})")
+        if not pages or n_proj == 0:
+            # An empty or project-less crawl is almost always a transient fetch
+            # failure, not "the portfolio really has nothing now" — don't let it
+            # clobber a previously-good stored graph.
+            notes.append(
+                f"portfolio graph: {len(pages)} pages, {n_proj} projects, "
+                "keeping previous graph")
+        else:
+            sheets.write_portfolio_graph(creds, sid, graph.model_dump_json(),
+                                         now.strftime("%Y-%m-%d %H:%M"))
+            notes.append(f"portfolio graph: {len(pages)} pages, {n_proj} projects")
+            try:
+                from jobpilot import tailor
+                drive = tailor._drive(creds)
+                folder = tailor._ensure_folder(drive, "JobPilot Applications")
+                tailor.upload_bytes(creds, folder, "_portfolio_graph.html",
+                                    render_html(graph).encode("utf-8"), "text/html")
+            except Exception as exc:  # noqa: BLE001 — optional viewer, never fails the run
+                notes.append(f"portfolio graph html: skipped ({type(exc).__name__})")
     except Exception as exc:  # noqa: BLE001 — degrade to a note
         notes.append(f"portfolio graph: FAILED ({type(exc).__name__}: {exc})")
     return notes

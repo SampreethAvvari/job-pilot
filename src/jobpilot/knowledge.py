@@ -84,12 +84,14 @@ def portfolio_section(cfg: Config, client: httpx.Client, creds=None,
     if creds and spreadsheet_id:
         from jobpilot import portfolio_graph as pgmod
 
-        raw = sheets.read_portfolio_graph(creds, spreadsheet_id)
-        if raw:
-            try:
-                return pgmod.render_pack(pgmod.PortfolioGraph.model_validate_json(raw))
-            except Exception:  # noqa: BLE001 — fall through to homepage strip
-                pass
+        try:
+            raw = sheets.read_portfolio_graph(creds, spreadsheet_id)
+            if raw:
+                pack = pgmod.render_pack(pgmod.PortfolioGraph.model_validate_json(raw))
+                if pack.strip():
+                    return pack
+        except Exception:  # noqa: BLE001 — Sheets error or parse failure: fall
+            pass          # through to the homepage strip below
     url = cfg.profile.portfolio
     if not url:
         return ""

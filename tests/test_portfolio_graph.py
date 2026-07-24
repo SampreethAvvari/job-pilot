@@ -87,7 +87,7 @@ def test_extract_page_degrades_on_bad_json():
 
 def test_build_graph_dedupes_projects_and_links_edges():
     e1 = pg.PageExtract(projects=[pg.ProjectFacts(
-        name="Enterprise Search", company="Hybridge", stack=["pgvector"],
+        name="Enterprise Search", company="Acme Robotics", stack=["pgvector"],
         metrics=["70% fewer hallucinations"],
         links={"case_study": "https://x/posts/enterprise-search"})],
         skills=["RAG"], technologies=["pgvector"])
@@ -203,6 +203,54 @@ def test_rebuild_crawls_and_writes(monkeypatch):
                        __import__("datetime").datetime(2026, 7, 24, 12, 0))
     assert "Loan Radar" in written["json"]
     assert any("portfolio graph" in n.lower() for n in notes)
+
+
+def test_rebuild_keeps_previous_graph_on_empty_crawl(monkeypatch):
+    import jobpilot.sheets as sh
+    from tests.test_sources import make_cfg
+
+    monkeypatch.setattr(pg, "discover_urls", lambda base, c: ["https://x/a"])
+    monkeypatch.setattr(pg, "fetch_pages", lambda urls, c: [])  # crawl found nothing
+    write_calls = []
+    monkeypatch.setattr(sh, "write_portfolio_graph",
+                        lambda c, s, j, ts: write_calls.append(j))
+
+    notes = pg.rebuild("creds", "sid", make_cfg(), lambda p: "{}", object(),
+                       __import__("datetime").datetime(2026, 7, 24, 12, 0))
+    assert write_calls == []                                    # stored graph untouched
+    assert any("keeping previous graph" in n.lower() for n in notes)
+
+
+def test_portfolio_section_falls_back_when_graph_empty(monkeypatch):
+    """A stored graph that parses fine but has zero project nodes renders to ""
+    via render_pack; portfolio_section must fall through to the homepage strip
+    fallback instead of returning that empty string."""
+    import jobpilot.knowledge as kn
+    import jobpilot.sheets as sh
+    from tests.test_sources import make_cfg
+
+    empty_of_projects = pg.PortfolioGraph(
+        nodes=[pg.GraphNode(id="skill:evals", type="skill", label="evals")],
+        edges=[], crawled_at="2026-07-24 12:00", sources=["https://x"],
+    ).model_dump_json()
+    monkeypatch.setattr(sh, "read_portfolio_graph", lambda creds, sid: empty_of_projects)
+
+    # Smallest-seam stub for the httpx client used by the homepage-strip fallback:
+    # a client whose .get(url) returns an object with .raise_for_status()/.text,
+    # avoiding the need to wire a real httpx.Client/httpx_mock for this seam.
+    class _StubResp:
+        text = "<html><body>Homepage fallback content</body></html>"
+
+        def raise_for_status(self):
+            return None
+
+    class _StubClient:
+        def get(self, url, *a, **k):
+            return _StubResp()
+
+    text = kn.portfolio_section(make_cfg(), _StubClient(), creds="creds",
+                                spreadsheet_id="sid")
+    assert text == "Homepage fallback content"
 
 
 def test_render_html_is_self_contained():
