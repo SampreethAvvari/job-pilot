@@ -94,9 +94,19 @@ oakland, berkeley, south san francisco, san mateo, foster city), switch to the S
 address + `..._reallinks_sunnyvale.pdf`. Triggers are editable in the profile.
 
 **Cover letter (AI):** generated per job from the JD + knowledge pack + resume facts, in
-the user's voice, rendered to PDF (reuse `latexpdf`/tailor rendering) and attached when
-the form takes a file; pasted as text when it wants a text box. Stored in the evidence
-folder.
+the user's voice. **Always rendered to PDF** (reuse `latexpdf`/tailor rendering) and
+stored in the evidence folder for every application. Attached as the PDF when the form
+has a file field; when the form only offers a text box, a plain-text version is pasted
+AND the PDF is still saved to evidence.
+
+**Length-aware answers (graceful, never abrupt):** before writing any answer or cover
+letter, the engine reads the field's real limit from the DOM (`maxlength`, or a stated
+word/character cap in the question text). The AI is told the limit up front and writes a
+complete, self-contained answer that fits inside it, rather than writing long and hard-
+truncating. If a JD or context is too long to fit, the AI summarizes it down gracefully
+(preserving the key point) instead of pasting whatever fits and cutting mid-sentence.
+A hard-truncate is a last-resort fallback only, and if it ever triggers the answer is
+flagged in the plan for review.
 
 **Screening questions (AI):** answered by Gemini grounded in the knowledge pack, resume,
 the JD, and the profile's `skills`/`projects`/`portfolio_links` blocks. When an answer
@@ -114,6 +124,11 @@ Rules, enforced in the prompt and by a deterministic post-filter (reuse the assi
 dash sanitizer): first person; natural spoken language, not stiff written prose;
 succinct; honest, concessions allowed ("I haven't used X in production, but..."); no
 AI-tell vocabulary; no em or en dashes.
+
+**Every question answered on its own merits.** Each screening question is handled
+individually (its own prompt with that question's field limit), directly answers what
+was asked, and reads cleanly. No boilerplate reused across questions, no answer that
+dodges the actual question.
 
 ### Truthfulness gate (all modes, including full-auto)
 
