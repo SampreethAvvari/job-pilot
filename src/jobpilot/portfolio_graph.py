@@ -87,13 +87,13 @@ def discover_urls(base: str, client: httpx.Client) -> list[str]:
     add(base + "/")  # add base with trailing slash
     for seed in seeds:
         try:
-            resp = client.get(seed)
+            resp = client.get(seed, headers=UA)
             resp.raise_for_status()
         except httpx.HTTPError:
             continue
         add(seed)
         for href in _HREF_RE.findall(resp.text):
-            add(urljoin(seed + "/", href))
+            add(urljoin(seed.rstrip("/") + "/", href))
     # Base must sort first; keep discovery order otherwise.
     order.sort(key=lambda u: (u.rstrip("/") != base,))
     return order[:MAX_PAGES]
@@ -104,7 +104,7 @@ def fetch_pages(urls: list[str], client: httpx.Client) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for url in urls:
         try:
-            resp = client.get(url)
+            resp = client.get(url, headers=UA)
             resp.raise_for_status()
         except httpx.HTTPError:
             continue
