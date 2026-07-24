@@ -29,6 +29,7 @@ class ApplicationPlan(BaseModel):
     title: str
     ats: str
     location_key: str = "ny"
+    cover_letter_text: str = ""  # generated body; PDF render + Drive upload happen later
     cover_letter_pdf_url: str = ""
     questions: list[Question] = Field(default_factory=list)
     status: ApplicationStatus = "queued"
