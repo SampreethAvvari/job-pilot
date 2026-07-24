@@ -54,6 +54,10 @@ export async function triggerRebuild(variant: string): Promise<void> {
   await runWithArgs(["--rebuild-resume", variant]);
 }
 
+export async function triggerPortfolioGraph(): Promise<void> {
+  await runWithArgs(["--rebuild-portfolio-graph"]);
+}
+
 export async function latestRun(): Promise<{ state: RunState; started: string }> {
   const client = await auth.getClient();
   const res = await client.request<{

@@ -216,6 +216,12 @@ def run(cfg: Config, dry_run: bool = False, only: list[str] | None = None,
     tailor_llm = make_tailor_llm(cfg)
     notes.extend(auto_tailor(creds, sid, cfg, tailor_llm, now))
     notes.extend(auto_outreach(creds, sid, cfg, tailor_llm, now))
+
+    from jobpilot import portfolio_graph
+    pg_llm = make_gemini_llm(cfg, schema=portfolio_graph.PageExtract)
+    pg_client = httpx.Client(timeout=20, follow_redirects=True, headers=portfolio_graph.UA)
+    notes.extend(portfolio_graph.rebuild(creds, sid, cfg, pg_llm, pg_client, now))
+
     notes.extend(knowledge.refresh(creds, sid, cfg, now))  # keeps the Assistant grounded
     # Only the Jobs-bound list: the digest must describe what the owner will
     # actually see in the Jobs tab, not rows route_jobs sent to Archive.

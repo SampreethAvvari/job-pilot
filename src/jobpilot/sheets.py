@@ -505,6 +505,43 @@ def write_knowledge(creds, spreadsheet_id: str, sections: dict[str, str],
         ).execute()
 
 
+PORTFOLIO_GRAPH_HEADERS = ["Key", "Updated", "JSON"]
+
+
+def ensure_portfolio_graph_tab(creds, spreadsheet_id: str) -> None:
+    svc = _svc(creds)
+    meta = svc.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    titles = [s["properties"]["title"] for s in meta["sheets"]]
+    if "PortfolioGraph" in titles:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": "PortfolioGraph"}}}]},
+    ).execute()
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="PortfolioGraph!A1", valueInputOption="RAW",
+        body={"values": [PORTFOLIO_GRAPH_HEADERS]},
+    ).execute()
+
+
+def write_portfolio_graph(creds, spreadsheet_id: str, graph_json: str,
+                          now_str: str) -> None:
+    ensure_portfolio_graph_tab(creds, spreadsheet_id)
+    svc = _svc(creds)
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="PortfolioGraph!A2", valueInputOption="RAW",
+        body={"values": [["graph", now_str, graph_json[:45000]]]},
+    ).execute()
+
+
+def read_portfolio_graph(creds, spreadsheet_id: str) -> str:
+    ensure_portfolio_graph_tab(creds, spreadsheet_id)
+    resp = (_svc(creds).spreadsheets().values()
+            .get(spreadsheetId=spreadsheet_id, range="PortfolioGraph!A2:C2").execute())
+    rows = resp.get("values", [])
+    return rows[0][2] if rows and len(rows[0]) >= 3 else ""
+
+
 def read_rows(creds, spreadsheet_id: str) -> list[dict]:
     """All job rows as dicts keyed by header, with 1-based sheet row numbers."""
     resp = (

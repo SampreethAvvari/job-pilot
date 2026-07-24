@@ -16,6 +16,7 @@ const LINKS = [
   { href: "/companies", label: "Companies", glyph: "▦" },
   { href: "/outreach", label: "Outreach", glyph: "✉" },
   { href: "/assistant", label: "Assistant", glyph: "✦" },
+  { href: "/knowledge", label: "Knowledge", glyph: "⬡" },
 ];
 
 export function Nav() {
