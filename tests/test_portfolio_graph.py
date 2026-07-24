@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import re
+
+import httpx
+import pytest
+
 import jobpilot.portfolio_graph as pg
+
+
+BASE = "https://portfolio.example"
 
 
 def test_page_extract_schema_roundtrips():
@@ -35,3 +43,27 @@ def test_portfolio_graph_serializes_nodes_and_edges():
     )
     blob = g.model_dump_json()
     assert pg.PortfolioGraph.model_validate_json(blob).nodes[0].type == "project"
+
+
+@pytest.mark.httpx_mock(assert_all_requests_were_expected=False)
+def test_discover_urls_scopes_to_host_and_dedupes(httpx_mock):
+    httpx_mock.add_response(url=f"{BASE}/", text=(
+        '<a href="/projects">Projects</a>'
+        '<a href="/posts/enterprise-search">ES</a>'
+        '<a href="/posts/enterprise-search">dup</a>'
+        '<a href="https://twitter.com/x">off</a>'))
+    httpx_mock.add_response(url=re.compile(rf"{re.escape(BASE)}/(projects|posts).*"),
+                            text="<a href='/posts/npc-coach'>NPC</a>")
+    urls = pg.discover_urls(BASE, httpx.Client())
+    assert urls[0] == f"{BASE}/"                       # base first
+    assert f"{BASE}/posts/enterprise-search" in urls
+    assert f"{BASE}/posts/npc-coach" in urls           # second-hop discovery
+    assert all(u.startswith(BASE) for u in urls)       # host-scoped
+    assert len(urls) == len(set(urls))                 # deduped
+
+
+def test_fetch_pages_skips_errors(httpx_mock):
+    httpx_mock.add_response(url=f"{BASE}/a", text="<p>Alpha  body</p>")
+    httpx_mock.add_response(url=f"{BASE}/b", status_code=404)
+    pages = pg.fetch_pages([f"{BASE}/a", f"{BASE}/b"], httpx.Client())
+    assert pages == [(f"{BASE}/a", "Alpha  body")]
