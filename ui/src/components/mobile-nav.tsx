@@ -11,6 +11,7 @@ const TABS = [
   { href: "/replies", label: "Replies" },
   { href: "/outreach", label: "Outreach" },
   { href: "/assistant", label: "Assistant" },
+  { href: "/knowledge", label: "Knowledge" },
 ];
 
 export default function MobileNav() {
