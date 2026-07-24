@@ -99,7 +99,10 @@ the form takes a file; pasted as text when it wants a text box. Stored in the ev
 folder.
 
 **Screening questions (AI):** answered by Gemini grounded in the knowledge pack, resume,
-and JD. Each question + drafted answer + screenshot recorded in the plan.
+the JD, and the profile's `skills`/`projects`/`portfolio_links` blocks. When an answer
+wants a work sample or link, the engine cites a REAL portfolio link (case study, demo,
+or GitHub) from the profile and never invents a URL. Each question + drafted answer +
+screenshot recorded in the plan.
 
 ### Answer style contract (prompt + post-filter)
 
