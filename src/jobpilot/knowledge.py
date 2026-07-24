@@ -78,7 +78,18 @@ def github_section(cfg: Config, client: httpx.Client) -> str:
     return "\n\n".join(out)
 
 
-def portfolio_section(cfg: Config, client: httpx.Client) -> str:
+def portfolio_section(cfg: Config, client: httpx.Client, creds=None,
+                      spreadsheet_id: str = "") -> str:
+    """Render the stored portfolio graph into pack text; fall back to homepage strip."""
+    if creds and spreadsheet_id:
+        from jobpilot import portfolio_graph as pgmod
+
+        raw = sheets.read_portfolio_graph(creds, spreadsheet_id)
+        if raw:
+            try:
+                return pgmod.render_pack(pgmod.PortfolioGraph.model_validate_json(raw))
+            except Exception:  # noqa: BLE001 — fall through to homepage strip
+                pass
     url = cfg.profile.portfolio
     if not url:
         return ""
@@ -99,7 +110,7 @@ def refresh(creds, spreadsheet_id: str, cfg: Config, now: datetime) -> list[str]
         "profile": lambda: profile_section(cfg),
         "resumes": resumes_section,
         "github": lambda: github_section(cfg, client),
-        "portfolio": lambda: portfolio_section(cfg, client),
+        "portfolio": lambda: portfolio_section(cfg, client, creds, spreadsheet_id),
     }
     for name, build in builders.items():
         try:

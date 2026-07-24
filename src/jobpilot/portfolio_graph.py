@@ -8,6 +8,7 @@ links. Spec: docs/superpowers/specs/2026-07-24-auto-apply-design.md
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urljoin, urlparse
@@ -15,6 +16,8 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from pydantic import BaseModel, Field
 
+from jobpilot import sheets
+from jobpilot.config import Config
 from jobpilot.scorer import LlmFn
 from jobpilot.sources.common import strip_html
 
@@ -195,3 +198,49 @@ def build_graph(extracts: list[PageExtract], sources: list[str],
 
     return PortfolioGraph(nodes=list(nodes.values()), edges=edges,
                           crawled_at=now_str, sources=sources)
+
+
+def render_pack(graph: PortfolioGraph) -> str:
+    """Flatten the graph into per-project Knowledge-pack text."""
+    out: list[str] = []
+    for n in graph.nodes:
+        if n.type != "project":
+            continue
+        d = n.data
+        parts = [f"## {n.label}"]
+        if d.get("one_line"):
+            parts.append(d["one_line"])
+        if d.get("problem"):
+            parts.append(f"Problem: {d['problem']}")
+        if d.get("approach"):
+            parts.append(f"Approach: {d['approach']}")
+        if d.get("stack"):
+            parts.append("Stack: " + ", ".join(d["stack"]))
+        if d.get("metrics"):
+            parts.append("Outcomes: " + "; ".join(d["metrics"]))
+        links = d.get("links") or {}
+        if links:
+            parts.append("Links: " + " ".join(f"{k}={v}" for k, v in links.items()))
+        out.append("\n".join(parts))
+    return "\n\n".join(out)
+
+
+def rebuild(creds, sid: str, cfg: Config, llm, client, now: datetime) -> list[str]:
+    """Crawl portfolio -> extract -> graph -> store. Never raises."""
+    notes: list[str] = []
+    base = cfg.profile.portfolio
+    if not base:
+        return ["portfolio graph: no portfolio URL configured"]
+    try:
+        urls = discover_urls(base, client)
+        pages = fetch_pages(urls, client)
+        extracts = [extract_page(u, t, llm) for u, t in pages]
+        graph = build_graph(extracts, [u for u, _ in pages],
+                            now.strftime("%Y-%m-%d %H:%M"))
+        sheets.write_portfolio_graph(creds, sid, graph.model_dump_json(),
+                                     now.strftime("%Y-%m-%d %H:%M"))
+        n_proj = sum(1 for x in graph.nodes if x.type == "project")
+        notes.append(f"portfolio graph: {len(pages)} pages, {n_proj} projects")
+    except Exception as exc:  # noqa: BLE001 — degrade to a note
+        notes.append(f"portfolio graph: FAILED ({type(exc).__name__}: {exc})")
+    return notes

@@ -55,7 +55,8 @@ def test_refresh_degrades_per_section_and_writes(monkeypatch):
                         lambda c, s, sections, ts: written.update(sections))
     monkeypatch.setattr(kn, "github_section",
                         lambda cfg, client: (_ for _ in ()).throw(RuntimeError("rate limit")))
-    monkeypatch.setattr(kn, "portfolio_section", lambda cfg, client: "portfolio text")
+    monkeypatch.setattr(kn, "portfolio_section",
+                        lambda cfg, client, creds=None, spreadsheet_id="": "portfolio text")
 
     notes = kn.refresh("creds", "sid", make_cfg(), NOW)
     assert written["portfolio"] == "portfolio text"

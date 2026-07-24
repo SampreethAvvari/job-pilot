@@ -173,3 +173,33 @@ def test_sheet_storage_roundtrip(monkeypatch):
 
     sh.write_portfolio_graph("creds", "sid", '{"nodes":[]}', "2026-07-24 12:00")
     assert sh.read_portfolio_graph("creds", "sid") == '{"nodes":[]}'
+
+
+def test_render_pack_lists_projects_with_links():
+    g = pg.build_graph([pg.PageExtract(projects=[pg.ProjectFacts(
+        name="CBCT Scan Validator", one_line="artifact detection",
+        metrics=["macro AUROC 0.93", "replaced $98K quote"],
+        links={"case_study": "https://x/posts/cbct-scan-validator"})])],
+        ["https://x"], "2026-07-24 12:00")
+    text = pg.render_pack(g)
+    assert "CBCT Scan Validator" in text
+    assert "macro AUROC 0.93" in text
+    assert "https://x/posts/cbct-scan-validator" in text
+
+
+def test_rebuild_crawls_and_writes(monkeypatch):
+    import jobpilot.sheets as sh
+    from tests.test_sources import make_cfg
+
+    monkeypatch.setattr(pg, "discover_urls", lambda base, c: ["https://x/a"])
+    monkeypatch.setattr(pg, "fetch_pages", lambda urls, c: [("https://x/a", "body")])
+    monkeypatch.setattr(pg, "extract_page", lambda url, text, llm: pg.PageExtract(
+        projects=[pg.ProjectFacts(name="Loan Radar", one_line="MLOps")]))
+    written = {}
+    monkeypatch.setattr(sh, "write_portfolio_graph",
+                        lambda c, s, j, ts: written.update({"json": j}))
+
+    notes = pg.rebuild("creds", "sid", make_cfg(), lambda p: "{}", object(),
+                       __import__("datetime").datetime(2026, 7, 24, 12, 0))
+    assert "Loan Radar" in written["json"]
+    assert any("portfolio graph" in n.lower() for n in notes)
