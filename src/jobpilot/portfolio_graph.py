@@ -7,7 +7,7 @@ links. Spec: docs/superpowers/specs/2026-07-24-auto-apply-design.md
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -39,7 +39,7 @@ class GraphNode(BaseModel):
     id: str
     type: NodeType
     label: str
-    data: dict = Field(default_factory=dict)
+    data: dict[str, Any] = Field(default_factory=dict)
 
 
 class GraphEdge(BaseModel):

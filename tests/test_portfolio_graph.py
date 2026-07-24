@@ -13,7 +13,7 @@ def test_page_extract_schema_roundtrips():
             "stack": ["pgvector", "Vertex Gemini"],
             "metrics": ["70% fewer hallucinations", "$300/mo"],
             "role": "AI Engineer",
-            "company": "Hybridge",
+            "company": "Acme Robotics",
             "dates": "Jun 2026 - Present",
             "links": {"case_study": "https://x/posts/enterprise-search"},
         }],
