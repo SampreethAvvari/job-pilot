@@ -236,6 +236,15 @@ def render_html(graph: PortfolioGraph) -> str:
         "edges": [{"source": e.source, "target": e.target, "rel": e.rel}
                   for e in graph.edges],
     })
+    # Escape HTML/JS-sensitive characters to prevent script breakout via embedded JSON
+    data = (
+        data
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
         "<title>Portfolio graph</title>"

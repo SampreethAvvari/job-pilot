@@ -214,13 +214,24 @@ def test_render_html_is_self_contained():
     assert "http://" not in html and "https://cdn" not in html  # no external assets
 
 
+def test_render_html_escapes_script_breakout():
+    # Test XSS prevention: node label with script-breakout payload
+    g = pg.build_graph(
+        [pg.PageExtract(projects=[pg.ProjectFacts(name="Evil</script><script>alert(1)</script>")])],
+        ["https://x"], "2026-07-24 12:00")
+    html = pg.render_html(g)
+    # Assert the raw breakout sequence is not present (must be escaped)
+    assert "</script><script>" not in html, "Script breakout payload not escaped"
+    # Assert </script> appears exactly once (only the legitimate closing tag)
+    assert html.count("</script>") == 1, "Should have exactly one legitimate closing script tag"
+    # Assert valid HTML structure is preserved
+    assert "<html" in html.lower(), "HTML structure should be preserved"
+
+
 def test_main_has_rebuild_portfolio_graph_flag():
-    import argparse
     import jobpilot.__main__ as m
 
-    # The flag must parse without error.
-    parser = argparse.ArgumentParser()
-    # Re-declare the same flag the module adds, then assert the module references it.
+    # Assert the module references the portfolio graph flag.
     import inspect
     src = inspect.getsource(m)
     assert "--rebuild-portfolio-graph" in src
