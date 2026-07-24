@@ -118,6 +118,15 @@ def upload_pdf(creds, folder_id: str, filename: str, pdf: bytes) -> str:
     return f"https://drive.google.com/file/d/{f['id']}/view"
 
 
+def upload_bytes(creds, folder_id: str, filename: str, blob: bytes,
+                 mimetype: str) -> str:
+    f = _drive(creds).files().create(
+        body={"name": filename, "parents": [folder_id]},
+        media_body=MediaInMemoryUpload(blob, mimetype=mimetype),
+        fields="id, webViewLink").execute()
+    return f.get("webViewLink", "")
+
+
 def tailor_row(creds, spreadsheet_id: str, row: dict, cfg: Config,
                llm: Callable[[str], str], now: datetime) -> str:
     """Tailor one sheet row through the judge-driven rewrite loop."""

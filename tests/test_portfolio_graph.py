@@ -205,6 +205,15 @@ def test_rebuild_crawls_and_writes(monkeypatch):
     assert any("portfolio graph" in n.lower() for n in notes)
 
 
+def test_render_html_is_self_contained():
+    g = pg.build_graph([pg.PageExtract(projects=[pg.ProjectFacts(name="JobPilot")])],
+                       ["https://x"], "2026-07-24 12:00")
+    html = pg.render_html(g)
+    assert "<html" in html.lower()
+    assert "JobPilot" in html
+    assert "http://" not in html and "https://cdn" not in html  # no external assets
+
+
 def test_main_has_rebuild_portfolio_graph_flag():
     import argparse
     import jobpilot.__main__ as m

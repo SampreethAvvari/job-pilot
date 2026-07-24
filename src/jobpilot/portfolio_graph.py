@@ -7,6 +7,7 @@ links. Spec: docs/superpowers/specs/2026-07-24-auto-apply-design.md
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -225,6 +226,38 @@ def render_pack(graph: PortfolioGraph) -> str:
     return "\n\n".join(out)
 
 
+def render_html(graph: PortfolioGraph) -> str:
+    """Self-contained HTML map: embedded data, inline canvas layout, no external
+    assets. Only id/type/label (nodes) and source/target/rel (edges) are embedded
+    — the full node `data` blob (which may hold https:// portfolio links) is
+    intentionally left out so the page stays free of any external-looking URLs."""
+    data = json.dumps({
+        "nodes": [{"id": n.id, "type": n.type, "label": n.label} for n in graph.nodes],
+        "edges": [{"source": e.source, "target": e.target, "rel": e.rel}
+                  for e in graph.edges],
+    })
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<title>Portfolio graph</title>"
+        "<style>body{font:14px system-ui;margin:0;background:#0b0b0f;color:#e8e8ea}"
+        "#c{display:block}#l{position:fixed;top:8px;left:8px;opacity:.7}</style></head>"
+        "<body><div id='l'>Portfolio knowledge graph</div>"
+        "<canvas id='c'></canvas><script>const G=" + data + ";"
+        "const cv=document.getElementById('c'),x=cv.getContext('2d');"
+        "cv.width=innerWidth;cv.height=innerHeight;"
+        "const N=G.nodes.map((n,i)=>({...n,"
+        "px:innerWidth/2+Math.cos(i)*Math.min(innerWidth,innerHeight)*0.35,"
+        "py:innerHeight/2+Math.sin(i)*Math.min(innerWidth,innerHeight)*0.35}));"
+        "const idx=Object.fromEntries(N.map(n=>[n.id,n]));"
+        "x.strokeStyle='#334';G.edges.forEach(e=>{const a=idx[e.source],b=idx[e.target];"
+        "if(a&&b){x.beginPath();x.moveTo(a.px,a.py);x.lineTo(b.px,b.py);x.stroke();}});"
+        "N.forEach(n=>{x.fillStyle=n.type==='project'?'#7c9cff':'#3a3a44';"
+        "x.beginPath();x.arc(n.px,n.py,n.type==='project'?8:4,0,7);x.fill();"
+        "x.fillStyle='#e8e8ea';x.fillText(n.label,n.px+8,n.py+3);});"
+        "</script></body></html>"
+    )
+
+
 def rebuild(creds, sid: str, cfg: Config, llm, client, now: datetime) -> list[str]:
     """Crawl portfolio -> extract -> graph -> store. Never raises."""
     notes: list[str] = []
@@ -241,6 +274,14 @@ def rebuild(creds, sid: str, cfg: Config, llm, client, now: datetime) -> list[st
                                      now.strftime("%Y-%m-%d %H:%M"))
         n_proj = sum(1 for x in graph.nodes if x.type == "project")
         notes.append(f"portfolio graph: {len(pages)} pages, {n_proj} projects")
+        try:
+            from jobpilot import tailor
+            drive = tailor._drive(creds)
+            folder = tailor._ensure_folder(drive, "JobPilot Applications")
+            tailor.upload_bytes(creds, folder, "_portfolio_graph.html",
+                                render_html(graph).encode("utf-8"), "text/html")
+        except Exception as exc:  # noqa: BLE001 — optional viewer, never fails the run
+            notes.append(f"portfolio graph html: skipped ({type(exc).__name__})")
     except Exception as exc:  # noqa: BLE001 — degrade to a note
         notes.append(f"portfolio graph: FAILED ({type(exc).__name__}: {exc})")
     return notes
