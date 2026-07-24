@@ -61,3 +61,21 @@ def test_bay_area_match_is_case_insensitive_and_substring():
 def test_non_bay_us_city_stays_ny():
     r = _sample().for_location("Austin, TX")
     assert r.city == "Brooklyn"
+
+
+def test_salary_free_text_prefers_negotiation_line():
+    c = _sample().compensation
+    assert c.salary_answer("comp is competitive", wants_number=False) == "Open to discussion"
+
+
+def test_salary_number_uses_jd_range_when_present():
+    c = _sample().compensation
+    ans = c.salary_answer("Salary range: $150,000 - $170,000 per year", wants_number=True)
+    assert "150,000" in ans or "170,000" in ans  # a number inside the JD range
+
+
+def test_salary_number_falls_back_without_jd_range_and_has_no_dash():
+    c = _sample().compensation
+    ans = c.salary_answer("no numbers here", wants_number=True)
+    assert "130,000" in ans and "140,000" in ans
+    assert "-" not in ans and "—" not in ans  # no dash, uses "to"

@@ -58,6 +58,21 @@ class Compensation(_Model):
     work_mode: str = "Open"
     how_did_you_hear: str = "Company website"
 
+    def salary_answer(self, jd_text: str, wants_number: bool) -> str:
+        import re
+
+        if not wants_number:
+            return self.salary_prefer_text
+        if self.use_jd_range_if_present:
+            nums = re.findall(r"\$?\s*(\d{2,3}(?:,\d{3})|\d{5,6})", jd_text or "")
+            vals = [int(n.replace(",", "")) for n in nums]
+            vals = [v for v in vals if 40000 <= v <= 500000]
+            if vals:
+                lo = min(vals)
+                return f"${lo:,}"
+        lo, hi = self.fallback_range_usd[0], self.fallback_range_usd[1]
+        return f"${lo:,} to ${hi:,}"
+
 
 class EducationItem(_Model):
     school: str
