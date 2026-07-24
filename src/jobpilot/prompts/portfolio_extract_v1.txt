@@ -1,0 +1,13 @@
+You are extracting a candidate's project portfolio into structured facts for a
+knowledge graph. Read the page below and return JSON matching the schema.
+
+STRICT RULES:
+- Only use facts stated on the page. Never invent metrics, dates, companies, or links.
+- Copy links (case study, demo, repo) exactly as they appear; do not guess URLs.
+- If the page is not about a project (e.g. a nav or contact page), return empty lists.
+- Keep each string concise and factual.
+
+PAGE URL: {url}
+
+PAGE CONTENT:
+{content}

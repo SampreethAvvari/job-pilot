@@ -8,12 +8,14 @@ links. Spec: docs/superpowers/specs/2026-07-24-auto-apply-design.md
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urljoin, urlparse
 
 import httpx
 from pydantic import BaseModel, Field
 
+from jobpilot.scorer import LlmFn
 from jobpilot.sources.common import strip_html
 
 NodeType = Literal["project", "skill", "technology", "company", "outcome"]
@@ -112,3 +114,18 @@ def fetch_pages(urls: list[str], client: httpx.Client) -> list[tuple[str, str]]:
         if text:
             out.append((url, text))
     return out
+
+
+EXTRACT_PROMPT = Path(__file__).parent / "prompts" / "portfolio_extract_v1.txt"
+
+
+def extract_page(url: str, text: str, llm: LlmFn) -> PageExtract:
+    """Extract project facts from one page. Degrades to empty on any failure."""
+    prompt = EXTRACT_PROMPT.read_text(encoding="utf-8").format(url=url, content=text)
+    for attempt in (1, 2):
+        try:
+            return PageExtract.model_validate_json(llm(prompt))
+        except Exception:  # malformed output, schema mismatch, or API error
+            if attempt == 2:
+                return PageExtract()
+    return PageExtract()

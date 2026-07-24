@@ -67,3 +67,19 @@ def test_fetch_pages_skips_errors(httpx_mock):
     httpx_mock.add_response(url=f"{BASE}/b", status_code=404)
     pages = pg.fetch_pages([f"{BASE}/a", f"{BASE}/b"], httpx.Client())
     assert pages == [(f"{BASE}/a", "Alpha  body")]
+
+
+def test_extract_page_parses_llm_json():
+    payload = (
+        '{"projects":[{"name":"NPC Coach","one_line":"call QA",'
+        '"stack":["Gemini"],"metrics":["130% lift"],'
+        '"links":{"case_study":"https://x/posts/npc-coach"}}],'
+        '"skills":["evals"],"technologies":["Gemini"]}')
+    ex = pg.extract_page("https://x/posts/npc-coach", "some text", lambda p: payload)
+    assert ex.projects[0].name == "NPC Coach"
+    assert ex.projects[0].metrics == ["130% lift"]
+
+
+def test_extract_page_degrades_on_bad_json():
+    ex = pg.extract_page("https://x/a", "text", lambda p: "not json")
+    assert ex.projects == [] and ex.skills == []
