@@ -181,6 +181,73 @@ cover letter PDF, and `plan.json` (every question, the answer submitted, its tim
 The Applications tab renders all of it. On verified success the job's Sheet row flips to
 Applied with the date, feeding the existing reply-watch flow.
 
+## Portfolio knowledge graph (grounds the answer engine)
+
+Auto-apply answers and cover letters are only as good as what the engine knows about the
+user's work. Today `knowledge.py:portfolio_section` just fetches the homepage and strips
+it to 6000 chars, which is shallow. This feature replaces that with a real crawl that
+builds a project knowledge graph and feeds a much richer pack.
+
+**Approach: graph built, pack consumed.** The crawler builds a true graph (JSON + a
+viewable visual map), then flattens the relevant parts into the Knowledge pack the
+answer engine and Assistant already read. Grounding stays on the proven pack path; the
+graph adds connected reasoning and a map the user can look at.
+
+### Crawl
+
+New module `src/jobpilot/portfolio_graph.py`. Starting from `cfg.profile.portfolio`, it
+discovers and fetches every portfolio page: projects index, each project, the work page,
+and every blog case study (`/posts/*`). It reuses the polite `httpx` client + `strip_html`
+already in `knowledge.py` (JobPilot User-Agent, redirects, per-page failure isolation so
+one dead page never blocks the rest). Link discovery is scoped to the portfolio host only.
+
+### Extraction → graph
+
+Each page is passed to Gemini with a JSON-schema contract (same pattern as the scorer)
+that extracts structured facts per project: name, one-line, problem, approach, stack /
+technologies, metrics/outcomes, role, dates, company, and the real links (case study,
+demo, repo). These become graph **nodes** (project, skill, technology, company, outcome)
+and **edges** (`used-tech`, `solved-problem`, `built-at`, `achieved`, `links-to`).
+
+### Storage
+
+- **Graph JSON** stored in a new Sheet tab `PortfolioGraph` (nodes + edges + source URL +
+  crawl timestamp), the same "Sheet is the store" pattern used everywhere else. Optional
+  visual HTML map generated via the graphify tooling and saved to Drive
+  (`JobPilot Applications/_portfolio_graph.html`) for the user to open.
+- **Flattened pack:** `portfolio_section` is rewritten to render the graph into rich,
+  per-project Knowledge-pack text (problem, stack, metrics, links) instead of raw stripped
+  HTML. The answer engine and Assistant consume it with zero changes on their side.
+
+### Retrieval
+
+When answering a question, the engine selects the relevant subgraph (projects/skills
+matching the JD and question) and injects those project facts + real links as grounding.
+This is what lets "tell us about a time you shipped X" cite the right project with its
+actual metrics and a real link.
+
+**Hero projects preference.** The profile defines a ranked `hero_projects` list, each
+with the angle it sells best (Doctor Coach and NPC Coach as two distinct LLM-eval
+projects, CDF for agentic multimodal, Enterprise Search for RAG / AI-Engineer roles,
+CBCT Scan Validator for money saved / $98K replaced, Reconciliation for simple-yet-
+effective wins that break bad practices). When a question invites a work example, the
+engine prefers a hero project whose angle matches the role, before reaching for others.
+
+### Trigger & refresh
+
+- **Console button** on a new **Knowledge** page (or Assistant page) → `api/portfolio-graph`
+  route triggers a background `jobpilot` run with `--rebuild-portfolio-graph`. Progress/last-
+  built shown in the UI.
+- **Auto-refresh:** runs in the daily full pipeline (alongside `--refresh-knowledge`) and
+  can be nudged after portfolio publishes. Weekly is the floor; the button is for on-demand.
+- CLI flag `--rebuild-portfolio-graph` (mirrors `--refresh-knowledge`).
+
+### Honesty guard
+
+The graph is built only from the user's own published portfolio and GitHub. Extraction may
+not invent metrics or facts not present on the page (schema + prompt rule). The answer
+engine still only cites REAL links from the graph, never fabricated ones.
+
 ## Config additions
 
 `profile.yaml` gains an `apply` block:
@@ -202,6 +269,7 @@ Plus the `application:` block (private/Secret Manager only) already drafted in
 - `--apply-fill <job id>` — phase 1
 - `--apply-submit <job id>` — phase 2
 - `--apply <job id>` — fill then submit (review-off path)
+- `--rebuild-portfolio-graph` — crawl portfolio, rebuild graph + pack
 
 ## UI additions
 
@@ -215,12 +283,14 @@ Plus the `application:` block (private/Secret Manager only) already drafted in
 
 ## Rollout order
 
-1. Application profile loader + answer engine + Applications tab & queue UI + evidence.
-2. Greenhouse & Lever (direct POST), then Ashby, SmartRecruiters, Workable, Recruitee
+1. Portfolio knowledge graph (crawl → graph → richer pack) + Knowledge page button.
+   This grounds every answer, so it comes first.
+2. Application profile loader + answer engine + Applications tab & queue UI + evidence.
+3. Greenhouse & Lever (direct POST), then Ashby, SmartRecruiters, Workable, Recruitee
    headless adapters.
-3. Workday adapter (accounts, OTP, wizard, checkpointing).
-4. Local fallback script.
-5. Full-auto (review OFF) toggle unlocked, after enough reviewed plans build trust.
+4. Workday adapter (accounts, OTP, wizard, checkpointing).
+5. Local fallback script.
+6. Full-auto (review OFF) toggle unlocked, after enough reviewed plans build trust.
 
 ## Risks (acknowledged)
 
