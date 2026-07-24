@@ -104,3 +104,28 @@ def test_build_graph_dedupes_projects_and_links_edges():
     assert any(e.rel == "built-at" for e in g.edges)
     assert any(e.rel == "achieved" for e in g.edges)
     assert g.crawled_at == "2026-07-24 12:00"
+
+
+def test_build_graph_unions_stack_across_pages():
+    e1 = pg.PageExtract(projects=[pg.ProjectFacts(
+        name="Sample Project", stack=["pgvector"])])
+    e2 = pg.PageExtract(projects=[pg.ProjectFacts(  # same project, second page
+        name="Sample Project", stack=["Vertex Gemini"])])
+    g = pg.build_graph([e1, e2], ["https://x/projects"], "2026-07-24 12:00")
+
+    projects = [n for n in g.nodes if n.type == "project"]
+    assert len(projects) == 1
+    stack = set(projects[0].data["stack"])
+    assert {"pgvector", "Vertex Gemini"} <= stack     # both survive, none lost
+
+
+def test_build_graph_drops_degenerate_labels():
+    ex = pg.PageExtract(technologies=["...", "!!!", "Sample Tech"])
+    g = pg.build_graph([ex], ["https://x/projects"], "2026-07-24 12:00")
+
+    assert all(n.id for n in g.nodes)                  # no empty ids
+    ids = [n.id for n in g.nodes]
+    assert len(ids) == len(set(ids))                   # no collisions
+    labels = {n.label for n in g.nodes}
+    assert "Sample Tech" in labels
+    assert "..." not in labels and "!!!" not in labels

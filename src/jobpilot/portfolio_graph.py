@@ -150,7 +150,14 @@ def build_graph(extracts: list[PageExtract], sources: list[str],
         if nid not in nodes:
             nodes[nid] = GraphNode(id=nid, type=ntype, label=label, data=data or {})
         elif data:
-            nodes[nid].data.update({k: v for k, v in data.items() if v})
+            for k, v in data.items():
+                if not v:
+                    continue
+                cur = nodes[nid].data.get(k)
+                if isinstance(cur, list) and isinstance(v, list):
+                    nodes[nid].data[k] = cur + [x for x in v if x not in cur]
+                else:
+                    nodes[nid].data[k] = v
         return nid
 
     def edge(src: str, dst: str, rel: EdgeRel) -> None:
@@ -159,21 +166,31 @@ def build_graph(extracts: list[PageExtract], sources: list[str],
 
     for ex in extracts:
         for p in ex.projects:
+            if not _slug(p.name):
+                continue
             pid = node("project", p.name, {
                 "one_line": p.one_line, "problem": p.problem, "approach": p.approach,
                 "role": p.role, "dates": p.dates, "links": p.links,
                 "metrics": p.metrics, "stack": p.stack})
             for tech in p.stack:
+                if not _slug(tech):
+                    continue
                 edge(pid, node("technology", tech), "used-tech")
-            if p.company:
+            if p.company and _slug(p.company):
                 edge(pid, node("company", p.company), "built-at")
             for m in p.metrics:
+                if not _slug(m):
+                    continue
                 edge(pid, node("outcome", m), "achieved")
             for url in p.links.values():
                 edge(pid, node("outcome", url, {"url": url}), "links-to")
         for sk in ex.skills:
+            if not _slug(sk):
+                continue
             node("skill", sk)
         for tech in ex.technologies:
+            if not _slug(tech):
+                continue
             node("technology", tech)
 
     return PortfolioGraph(nodes=list(nodes.values()), edges=edges,
