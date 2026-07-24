@@ -83,3 +83,24 @@ def test_extract_page_parses_llm_json():
 def test_extract_page_degrades_on_bad_json():
     ex = pg.extract_page("https://x/a", "text", lambda p: "not json")
     assert ex.projects == [] and ex.skills == []
+
+
+def test_build_graph_dedupes_projects_and_links_edges():
+    e1 = pg.PageExtract(projects=[pg.ProjectFacts(
+        name="Enterprise Search", company="Hybridge", stack=["pgvector"],
+        metrics=["70% fewer hallucinations"],
+        links={"case_study": "https://x/posts/enterprise-search"})],
+        skills=["RAG"], technologies=["pgvector"])
+    e2 = pg.PageExtract(projects=[pg.ProjectFacts(  # same project, second page
+        name="enterprise search", stack=["Vertex Gemini"])])
+    g = pg.build_graph([e1, e2], ["https://x/projects"], "2026-07-24 12:00")
+
+    projects = [n for n in g.nodes if n.type == "project"]
+    assert len(projects) == 1                          # deduped by slug
+    techs = {n.label for n in g.nodes if n.type == "technology"}
+    assert techs == {"pgvector", "Vertex Gemini"}      # merged across pages
+    pid = projects[0].id
+    assert any(e.source == pid and e.rel == "used-tech" for e in g.edges)
+    assert any(e.rel == "built-at" for e in g.edges)
+    assert any(e.rel == "achieved" for e in g.edges)
+    assert g.crawled_at == "2026-07-24 12:00"

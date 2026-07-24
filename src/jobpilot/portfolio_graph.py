@@ -129,3 +129,52 @@ def extract_page(url: str, text: str, llm: LlmFn) -> PageExtract:
             if attempt == 2:
                 return PageExtract()
     return PageExtract()
+
+
+def _slug(text: str) -> str:
+    """Convert text to URL-safe slug."""
+    return re.sub(r"[^a-z0-9]+", "-", text.strip().lower()).strip("-")
+
+
+def build_graph(extracts: list[PageExtract], sources: list[str],
+                now_str: str) -> PortfolioGraph:
+    """Merge per-page extracts into a deduped nodes+edges graph."""
+    nodes: dict[str, GraphNode] = {}
+    edges: list[GraphEdge] = []
+
+    prefixes = {"project": "project", "skill": "skill", "technology": "tech",
+                "company": "company", "outcome": "outcome"}
+
+    def node(ntype: NodeType, label: str, data: dict | None = None) -> str:
+        nid = f"{prefixes[ntype]}:{_slug(label)}"
+        if nid not in nodes:
+            nodes[nid] = GraphNode(id=nid, type=ntype, label=label, data=data or {})
+        elif data:
+            nodes[nid].data.update({k: v for k, v in data.items() if v})
+        return nid
+
+    def edge(src: str, dst: str, rel: EdgeRel) -> None:
+        if not any(e.source == src and e.target == dst and e.rel == rel for e in edges):
+            edges.append(GraphEdge(source=src, target=dst, rel=rel))
+
+    for ex in extracts:
+        for p in ex.projects:
+            pid = node("project", p.name, {
+                "one_line": p.one_line, "problem": p.problem, "approach": p.approach,
+                "role": p.role, "dates": p.dates, "links": p.links,
+                "metrics": p.metrics, "stack": p.stack})
+            for tech in p.stack:
+                edge(pid, node("technology", tech), "used-tech")
+            if p.company:
+                edge(pid, node("company", p.company), "built-at")
+            for m in p.metrics:
+                edge(pid, node("outcome", m), "achieved")
+            for url in p.links.values():
+                edge(pid, node("outcome", url, {"url": url}), "links-to")
+        for sk in ex.skills:
+            node("skill", sk)
+        for tech in ex.technologies:
+            node("technology", tech)
+
+    return PortfolioGraph(nodes=list(nodes.values()), edges=edges,
+                          crawled_at=now_str, sources=sources)
