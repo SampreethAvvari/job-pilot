@@ -4,8 +4,13 @@ graph, mirroring the shape of portfolio_graph.PortfolioGraph but for repos.
 
 from __future__ import annotations
 
+import os
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
+from jobpilot import github_repos, sheets
+from jobpilot.config import Config
 from jobpilot.github_repos import RepoFacts
 from jobpilot.portfolio_graph import _slug
 
@@ -91,3 +96,54 @@ def build_repo_graph(repos: list[RepoFacts], now_str: str) -> RepoGraph:
             edge(rid, tid, "tagged")
 
     return RepoGraph(nodes=list(nodes.values()), edges=edges, built_at=now_str)
+
+
+def render_repo_pack(graph: RepoGraph) -> str:
+    """Flatten the graph into per-repo Knowledge-pack text."""
+    node_by_id = {n.id: n for n in graph.nodes}
+    out: list[str] = []
+    for n in graph.nodes:
+        if n.type != "repo":
+            continue
+        d = n.data
+        parts = [f"## {n.label}"]
+        if d.get("description"):
+            parts.append(d["description"])
+        langs = d.get("languages") or []
+        if langs:
+            parts.append("Languages: " + ", ".join(langs))
+        topics = [
+            node_by_id[e.target].label for e in graph.edges
+            if e.source == n.id and e.rel == "tagged" and e.target in node_by_id
+        ]
+        if topics:
+            parts.append("Topics: " + ", ".join(topics))
+        if d.get("commits"):
+            parts.append(f"Commits: {d['commits']}")
+        if d.get("url"):
+            parts.append(f"URL: {d['url']}")
+        if d.get("private"):
+            parts.append("Private")
+        out.append("\n".join(parts))
+    return "\n\n".join(out)
+
+
+def rebuild(creds, sid: str, cfg: Config, client, now: datetime) -> list[str]:
+    """Fetch contributed repos -> graph -> store. Never raises."""
+    token = os.environ.get("JOBPILOT_GITHUB_TOKEN", "")
+    if not token:
+        return ["repo graph: no JOBPILOT_GITHUB_TOKEN, skipped"]
+    try:
+        repos = github_repos.fetch_contributed_repos(token, client)
+        if not repos:
+            # An empty fetch is almost always a transient token/rate-limit issue,
+            # not "the account really has zero repos now" — don't let it clobber
+            # a previously-good stored graph.
+            return ["repo graph: 0 repos fetched, keeping previous graph"]
+        graph = build_repo_graph(repos, now.strftime("%Y-%m-%d %H:%M"))
+        n_orgs = sum(1 for n in graph.nodes if n.type == "org")
+        sheets.write_repo_graph(creds, sid, graph.model_dump_json(),
+                                now.strftime("%Y-%m-%d %H:%M"))
+        return [f"repo graph: {len(repos)} repos, {n_orgs} orgs"]
+    except Exception as exc:  # noqa: BLE001 — degrade to a note
+        return [f"repo graph: FAILED ({type(exc).__name__}: {exc})"]

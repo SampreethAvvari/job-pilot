@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import jobpilot.repo_graph as rg
 from jobpilot.github_repos import RepoFacts
 
@@ -152,3 +154,66 @@ def test_repo_sheet_storage_roundtrip(monkeypatch):
 
     sh.write_repo_graph("creds", "sid", '{"nodes":[]}', "2026-07-24 12:00")
     assert sh.read_repo_graph("creds", "sid") == '{"nodes":[]}'
+
+
+def test_render_repo_pack_lists_repo_with_url_and_languages():
+    g = rg.build_repo_graph([_org_repo()], "2026-07-24 12:00")
+    text = rg.render_repo_pack(g)
+    assert "## acme-org/widget-lib" in text
+    assert "Widgets for acme" in text
+    assert "Languages: Python, Go" in text
+    assert "Topics: widgets" in text
+    assert "Commits: 12" in text
+    assert "https://github.com/acme-org/widget-lib" in text
+    assert "Private" in text
+
+
+def test_render_repo_pack_skips_empty_fields():
+    g = rg.build_repo_graph([_own_repo()], "2026-07-24 12:00")
+    text = rg.render_repo_pack(g)
+    assert "## sampreeth/my-tool" in text
+    assert "Topics:" not in text  # own repo has no topics
+    assert "Private" not in text  # own repo is not private
+
+
+def test_rebuild_no_token_skips_write(monkeypatch):
+    import jobpilot.sheets as sh
+
+    monkeypatch.delenv("JOBPILOT_GITHUB_TOKEN", raising=False)
+    write_calls = []
+    monkeypatch.setattr(sh, "write_repo_graph", lambda c, s, j, ts: write_calls.append(j))
+
+    notes = rg.rebuild("creds", "sid", object(), object(), datetime(2026, 7, 24, 12, 0))
+    assert write_calls == []
+    assert any("no JOBPILOT_GITHUB_TOKEN" in n for n in notes)
+
+
+def test_rebuild_writes_and_notes_with_token(monkeypatch):
+    import jobpilot.sheets as sh
+    from jobpilot import github_repos
+
+    monkeypatch.setenv("JOBPILOT_GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(github_repos, "fetch_contributed_repos",
+                        lambda token, client: [_org_repo()])
+    written = {}
+    monkeypatch.setattr(sh, "write_repo_graph",
+                        lambda c, s, j, ts: written.update({"json": j}))
+
+    notes = rg.rebuild("creds", "sid", object(), object(), datetime(2026, 7, 24, 12, 0))
+    assert "widget-lib" in written["json"]
+    assert any("1 repos" in n for n in notes)
+
+
+def test_rebuild_keeps_previous_graph_on_empty_fetch(monkeypatch):
+    import jobpilot.sheets as sh
+    from jobpilot import github_repos
+
+    monkeypatch.setenv("JOBPILOT_GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(github_repos, "fetch_contributed_repos",
+                        lambda token, client: [])
+    write_calls = []
+    monkeypatch.setattr(sh, "write_repo_graph", lambda c, s, j, ts: write_calls.append(j))
+
+    notes = rg.rebuild("creds", "sid", object(), object(), datetime(2026, 7, 24, 12, 0))
+    assert write_calls == []
+    assert any("keeping previous graph" in n.lower() for n in notes)
