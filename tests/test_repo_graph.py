@@ -108,3 +108,47 @@ def test_build_repo_graph_drops_punctuation_only_language_label():
     lang_labels = {n.label for n in g.nodes if n.type == "language"}
     assert lang_labels == {"Python"}
     assert "..." not in lang_labels
+
+
+def test_repo_sheet_storage_roundtrip(monkeypatch):
+    import jobpilot.sheets as sh
+
+    store = {"rows": []}
+
+    class FakeValues:
+        def get(self, **k):
+            class R:
+                def execute(self_):
+                    return {"values": store["rows"]}
+            return R()
+        def update(self, **k):
+            store["rows"] = k["body"]["values"]
+            class R:
+                def execute(self_):
+                    return {}
+            return R()
+        def clear(self, **k):
+            class R:
+                def execute(self_):
+                    return {}
+            return R()
+
+    class FakeSheets:
+        def values(self):
+            return FakeValues()
+        def get(self, **k):
+            class R:
+                def execute(self_):
+                    return {"sheets": [{"properties": {"title": "RepoGraph"}}]}
+            return R()
+        def batchUpdate(self, **k):
+            class R:
+                def execute(self_):
+                    return {}
+            return R()
+
+    monkeypatch.setattr(sh, "_svc", lambda creds: type(
+        "S", (), {"spreadsheets": lambda self_: FakeSheets()})())
+
+    sh.write_repo_graph("creds", "sid", '{"nodes":[]}', "2026-07-24 12:00")
+    assert sh.read_repo_graph("creds", "sid") == '{"nodes":[]}'
