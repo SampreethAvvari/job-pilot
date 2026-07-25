@@ -3,12 +3,13 @@ import httpx
 from jobpilot.github_repos import RepoFacts, fetch_contributed_repos
 
 
-def _node(name, login, typename, is_private, languages=None, topics=None):
+def _node(name, login, typename, is_private, languages=None, topics=None, is_fork=False):
     return {
         "nameWithOwner": f"{login}/{name}",
         "name": name,
         "owner": {"login": login, "__typename": typename},
         "isPrivate": is_private,
+        "isFork": is_fork,
         "description": f"{name} description",
         "stargazerCount": 3,
         "url": f"https://github.com/{login}/{name}",
@@ -18,23 +19,21 @@ def _node(name, login, typename, is_private, languages=None, topics=None):
     }
 
 
-def test_fetch_contributed_repos_parses_org_and_own_repos(httpx_mock):
+def test_fetch_contributed_repos_merges_dedups_and_drops_forks(httpx_mock):
+    widget = _node("widget-lib", "acme-org", "Organization", True,
+                   languages=["Python", "Go"], topics=["infra"])
     httpx_mock.add_response(
         url="https://api.github.com/graphql",
         json={
             "data": {
                 "viewer": {
-                    "repositoriesContributedTo": {
-                        "nodes": [
-                            _node(
-                                "widget-lib", "acme-org", "Organization", True,
-                                languages=["Python", "Go"], topics=["infra"],
-                            ),
-                            _node(
-                                "my-tool", "sampleuser", "User", False,
-                            ),
-                        ]
-                    }
+                    # org repo appears in BOTH connections (must dedup to one)
+                    "contributed": {"nodes": [widget, _node("my-tool", "sampleuser", "User", False)]},
+                    "owned": {"nodes": [
+                        widget,  # duplicate of the contributed one
+                        _node("owned-app", "sampleuser", "User", True),
+                        _node("someone-fork", "sampleuser", "User", False, is_fork=True),  # dropped
+                    ]},
                 }
             }
         },
@@ -42,7 +41,11 @@ def test_fetch_contributed_repos_parses_org_and_own_repos(httpx_mock):
 
     repos = fetch_contributed_repos("faketoken", httpx.Client())
 
-    assert len(repos) == 2
+    # widget (deduped) + my-tool + owned-app = 3; the fork is dropped
+    assert len(repos) == 3
+    names = {r.name for r in repos}
+    assert names == {"widget-lib", "my-tool", "owned-app"}
+    assert "someone-fork" not in names
     org_repo = next(r for r in repos if r.owner == "acme-org")
     assert org_repo.name == "widget-lib"
     assert org_repo.is_org is True

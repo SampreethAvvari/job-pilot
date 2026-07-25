@@ -13,41 +13,31 @@ from pydantic import BaseModel, Field
 
 GITHUB_GRAPHQL = "https://api.github.com/graphql"
 
-# v1 fetches a single page of the 100 most recent contributed repos. GitHub's
-# GraphQL connections support `after`/`pageInfo.hasNextPage` cursors if this
-# ever needs to page past 100 — not built now since a single page comfortably
-# covers one person's active repos.
+# Everything the user is part of: repos contributed to, repos owned, and repos
+# in orgs they belong to (e.g. Hybridge). Merged + deduped in fetch. Single page
+# of 100 per connection comfortably covers one person's repos; GraphQL cursors
+# could page past that if ever needed.
 CONTRIB_QUERY = """
+fragment repoFields on Repository {
+  nameWithOwner
+  name
+  owner { login __typename }
+  isPrivate
+  isFork
+  description
+  stargazerCount
+  url
+  primaryLanguage { name }
+  languages(first: 10) { nodes { name } }
+  repositoryTopics(first: 10) { nodes { topic { name } } }
+}
 query {
   viewer {
-    repositoriesContributedTo(first: 100, contributionTypes: [COMMIT, PULL_REQUEST], includeUserRepositories: true) {
-      nodes {
-        nameWithOwner
-        name
-        owner {
-          login
-          __typename
-        }
-        isPrivate
-        description
-        stargazerCount
-        url
-        primaryLanguage {
-          name
-        }
-        languages(first: 10) {
-          nodes {
-            name
-          }
-        }
-        repositoryTopics(first: 10) {
-          nodes {
-            topic {
-              name
-            }
-          }
-        }
-      }
+    contributed: repositoriesContributedTo(first: 100, contributionTypes: [COMMIT, PULL_REQUEST, REPOSITORY], includeUserRepositories: true) {
+      nodes { ...repoFields }
+    }
+    owned: repositories(first: 100, ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER], orderBy: { field: PUSHED_AT, direction: DESC }) {
+      nodes { ...repoFields }
     }
   }
 }
@@ -96,7 +86,17 @@ def fetch_contributed_repos(token: str, client: httpx.Client) -> list[RepoFacts]
     try:
         resp = client.post(GITHUB_GRAPHQL, headers=headers, json={"query": CONTRIB_QUERY})
         resp.raise_for_status()
-        nodes = resp.json()["data"]["viewer"]["repositoriesContributedTo"]["nodes"]
-        return [_to_repo_facts(node) for node in nodes]
+        viewer = resp.json()["data"]["viewer"]
+        merged = ((viewer.get("contributed") or {}).get("nodes", [])
+                  + (viewer.get("owned") or {}).get("nodes", []))
+        seen: set[str] = set()
+        out: list[RepoFacts] = []
+        for node in merged:
+            key = node.get("nameWithOwner")
+            if not key or key in seen or node.get("isFork"):
+                continue  # dedup across the two connections; drop forks (not "his" work)
+            seen.add(key)
+            out.append(_to_repo_facts(node))
+        return out
     except Exception:  # noqa: BLE001 — best-effort fetch, always degrade to []
         return []
