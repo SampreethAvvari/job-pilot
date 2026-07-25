@@ -272,6 +272,77 @@ def test_rebuild_upload_failure_is_swallowed(monkeypatch):
     assert any("skipped" in n.lower() for n in notes)  # upload failure noted, not raised
 
 
+def _many_repos(n: int) -> list[RepoFacts]:
+    long_desc = "A synthetic repo used for size-cap testing. " * 40
+    return [
+        RepoFacts(
+            name=f"repo-{i}",
+            owner="acme-org",
+            is_org=True,
+            is_private=False,
+            description=long_desc,
+            primary_language="Python",
+            languages=["Python", "Go", "Rust"],
+            topics=[f"topic-{i}", "widgets"],
+            stars=i,
+            url=f"https://github.com/acme-org/repo-{i}",
+            contribution_commits=i,
+        )
+        for i in range(n)
+    ]
+
+
+def test_cap_graph_json_returns_small_graph_unchanged():
+    g = rg.build_repo_graph([_org_repo(), _own_repo()], "2026-07-24 12:00")
+    js, dropped = rg._cap_graph_json(g)
+    assert dropped == 0
+    assert js == g.model_dump_json()
+    parsed = rg.RepoGraph.model_validate_json(js)
+    assert len(parsed.nodes) == len(g.nodes)
+
+
+def test_cap_graph_json_drops_whole_repo_nodes_when_oversize():
+    g = rg.build_repo_graph(_many_repos(200), "2026-07-24 12:00")
+    full_json = g.model_dump_json()
+    assert len(full_json) > 45000  # sanity: this really is oversize
+
+    js, dropped = rg._cap_graph_json(g, limit=45000)
+
+    assert len(js) <= 45000
+    parsed = rg.RepoGraph.model_validate_json(js)  # must be valid JSON, not truncated garbage
+    repo_nodes = [n for n in parsed.nodes if n.type == "repo"]
+    assert len(repo_nodes) < 200
+    assert dropped > 0
+    assert dropped == 200 - len(repo_nodes)
+
+    # no dangling edges left pointing at dropped repo nodes
+    node_ids = {n.id for n in parsed.nodes}
+    for e in parsed.edges:
+        assert e.source in node_ids
+        assert e.target in node_ids
+
+
+def test_rebuild_caps_oversize_graph_drops_whole_repos(monkeypatch):
+    import jobpilot.sheets as sh
+    from jobpilot import github_repos
+
+    monkeypatch.setenv("JOBPILOT_GITHUB_TOKEN", "tok")
+    repos = _many_repos(200)
+    monkeypatch.setattr(github_repos, "fetch_contributed_repos",
+                        lambda token, client: repos)
+    written = {}
+    monkeypatch.setattr(sh, "write_repo_graph",
+                        lambda c, s, j, ts: written.update({"json": j}))
+
+    notes = rg.rebuild("creds", "sid", object(), object(), datetime(2026, 7, 24, 12, 0))
+
+    assert len(written["json"]) <= 45000
+    parsed = rg.RepoGraph.model_validate_json(written["json"])  # valid JSON, not garbage
+    repo_nodes = [n for n in parsed.nodes if n.type == "repo"]
+    assert len(repo_nodes) < 200
+    assert any("omitted for size cap" in n for n in notes)
+
+
 def test_main_has_rebuild_repo_graph_flag():
     import inspect
 

@@ -99,6 +99,29 @@ def build_repo_graph(repos: list[RepoFacts], now_str: str) -> RepoGraph:
     return RepoGraph(nodes=list(nodes.values()), edges=edges, built_at=now_str)
 
 
+def _cap_graph_json(graph: RepoGraph, limit: int = 45000) -> tuple[str, int]:
+    """Serialize the graph; if the result exceeds `limit` chars, drop whole
+    repo nodes (and their incident edges + any nodes left with no edges) from
+    the end until it fits. Always returns valid, parseable JSON — never a
+    mid-string slice. Returns (json_str, dropped_repo_count)."""
+    dropped = 0
+    nodes = list(graph.nodes)
+    edges = list(graph.edges)
+    while True:
+        g = RepoGraph(nodes=nodes, edges=edges, built_at=graph.built_at,
+                      source=graph.source)
+        js = g.model_dump_json()
+        if len(js) <= limit or not any(n.type == "repo" for n in nodes):
+            return js, dropped
+        # drop the last repo node + its incident edges + now-orphaned nodes
+        last_repo = next(n for n in reversed(nodes) if n.type == "repo")
+        nodes = [n for n in nodes if n.id != last_repo.id]
+        edges = [e for e in edges if e.source != last_repo.id and e.target != last_repo.id]
+        referenced = {e.source for e in edges} | {e.target for e in edges}
+        nodes = [n for n in nodes if n.type == "repo" or n.id in referenced]
+        dropped += 1
+
+
 def render_repo_pack(graph: RepoGraph) -> str:
     """Flatten the graph into per-repo Knowledge-pack text."""
     node_by_id = {n.id: n for n in graph.nodes}
@@ -184,9 +207,13 @@ def rebuild(creds, sid: str, cfg: Config, client, now: datetime) -> list[str]:
             return ["repo graph: 0 repos fetched, keeping previous graph"]
         graph = build_repo_graph(repos, now.strftime("%Y-%m-%d %H:%M"))
         n_orgs = sum(1 for n in graph.nodes if n.type == "org")
-        sheets.write_repo_graph(creds, sid, graph.model_dump_json(),
+        capped_json, dropped = _cap_graph_json(graph)
+        sheets.write_repo_graph(creds, sid, capped_json,
                                 now.strftime("%Y-%m-%d %H:%M"))
-        notes = [f"repo graph: {len(repos)} repos, {n_orgs} orgs"]
+        note = f"repo graph: {len(repos)} repos, {n_orgs} orgs"
+        if dropped:
+            note += f" ({dropped} repos omitted for size cap)"
+        notes = [note]
         try:
             from jobpilot import tailor
             drive = tailor._drive(creds)
