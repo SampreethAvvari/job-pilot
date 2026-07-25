@@ -4,6 +4,7 @@ graph, mirroring the shape of portfolio_graph.PortfolioGraph but for repos.
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime
 
@@ -128,6 +129,47 @@ def render_repo_pack(graph: RepoGraph) -> str:
     return "\n\n".join(out)
 
 
+def render_repo_html(graph: RepoGraph) -> str:
+    """Self-contained HTML map: embedded data, inline canvas layout, no external
+    assets. Only id/type/label (nodes) and source/target/rel (edges) are embedded
+    — the full node `data` blob (which may hold https:// repo URLs) is
+    intentionally left out so the page stays free of any external-looking URLs."""
+    data = json.dumps({
+        "nodes": [{"id": n.id, "type": n.type, "label": n.label} for n in graph.nodes],
+        "edges": [{"source": e.source, "target": e.target, "rel": e.rel}
+                  for e in graph.edges],
+    })
+    # Escape HTML/JS-sensitive characters to prevent script breakout via embedded JSON
+    data = (
+        data
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<title>Repo graph</title>"
+        "<style>body{font:14px system-ui;margin:0;background:#0b0b0f;color:#e8e8ea}"
+        "#c{display:block}#l{position:fixed;top:8px;left:8px;opacity:.7}</style></head>"
+        "<body><div id='l'>Repo knowledge graph</div>"
+        "<canvas id='c'></canvas><script>const G=" + data + ";"
+        "const cv=document.getElementById('c'),x=cv.getContext('2d');"
+        "cv.width=innerWidth;cv.height=innerHeight;"
+        "const N=G.nodes.map((n,i)=>({...n,"
+        "px:innerWidth/2+Math.cos(i)*Math.min(innerWidth,innerHeight)*0.35,"
+        "py:innerHeight/2+Math.sin(i)*Math.min(innerWidth,innerHeight)*0.35}));"
+        "const idx=Object.fromEntries(N.map(n=>[n.id,n]));"
+        "x.strokeStyle='#334';G.edges.forEach(e=>{const a=idx[e.source],b=idx[e.target];"
+        "if(a&&b){x.beginPath();x.moveTo(a.px,a.py);x.lineTo(b.px,b.py);x.stroke();}});"
+        "N.forEach(n=>{x.fillStyle=n.type==='repo'?'#7cffb0':'#3a3a44';"
+        "x.beginPath();x.arc(n.px,n.py,n.type==='repo'?8:4,0,7);x.fill();"
+        "x.fillStyle='#e8e8ea';x.fillText(n.label,n.px+8,n.py+3);});"
+        "</script></body></html>"
+    )
+
+
 def rebuild(creds, sid: str, cfg: Config, client, now: datetime) -> list[str]:
     """Fetch contributed repos -> graph -> store. Never raises."""
     token = os.environ.get("JOBPILOT_GITHUB_TOKEN", "")
@@ -144,6 +186,15 @@ def rebuild(creds, sid: str, cfg: Config, client, now: datetime) -> list[str]:
         n_orgs = sum(1 for n in graph.nodes if n.type == "org")
         sheets.write_repo_graph(creds, sid, graph.model_dump_json(),
                                 now.strftime("%Y-%m-%d %H:%M"))
-        return [f"repo graph: {len(repos)} repos, {n_orgs} orgs"]
+        notes = [f"repo graph: {len(repos)} repos, {n_orgs} orgs"]
+        try:
+            from jobpilot import tailor
+            drive = tailor._drive(creds)
+            folder = tailor._ensure_folder(drive, "JobPilot Applications")
+            tailor.upload_bytes(creds, folder, "_repo_graph.html",
+                                render_repo_html(graph).encode("utf-8"), "text/html")
+        except Exception as exc:  # noqa: BLE001 — optional viewer, never fails the run
+            notes.append(f"repo graph html: skipped ({type(exc).__name__})")
+        return notes
     except Exception as exc:  # noqa: BLE001 — degrade to a note
         return [f"repo graph: FAILED ({type(exc).__name__}: {exc})"]

@@ -217,3 +217,66 @@ def test_rebuild_keeps_previous_graph_on_empty_fetch(monkeypatch):
     notes = rg.rebuild("creds", "sid", object(), object(), datetime(2026, 7, 24, 12, 0))
     assert write_calls == []
     assert any("keeping previous graph" in n.lower() for n in notes)
+
+
+def test_render_repo_html_is_self_contained():
+    g = rg.build_repo_graph([_org_repo()], "2026-07-24 12:00")
+    html = rg.render_repo_html(g)
+    assert "<html" in html.lower()
+    assert "widget-lib" in html
+    assert "http://" not in html and "https://cdn" not in html  # no external assets
+
+
+def test_render_repo_html_escapes_script_breakout():
+    repo = RepoFacts(name="Evil</script><script>alert(1)</script>", owner="acme-org")
+    g = rg.build_repo_graph([repo], "2026-07-24 12:00")
+    html = rg.render_repo_html(g)
+    assert "</script><script>" not in html, "Script breakout payload not escaped"
+    assert html.count("</script>") == 1, "Should have exactly one legitimate closing script tag"
+    assert "<html" in html.lower(), "HTML structure should be preserved"
+
+
+def test_rebuild_uploads_repo_graph_html(monkeypatch):
+    import jobpilot.sheets as sh
+    from jobpilot import github_repos, tailor
+
+    monkeypatch.setenv("JOBPILOT_GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(github_repos, "fetch_contributed_repos",
+                        lambda token, client: [_org_repo()])
+    monkeypatch.setattr(sh, "write_repo_graph", lambda c, s, j, ts: None)
+
+    uploaded = {}
+    monkeypatch.setattr(tailor, "_drive", lambda creds: "drive")
+    monkeypatch.setattr(tailor, "_ensure_folder", lambda drive, name: "folder-id")
+    monkeypatch.setattr(tailor, "upload_bytes", lambda creds, folder, filename, blob, mime:
+                        uploaded.update({"filename": filename, "blob": blob, "mime": mime}))
+
+    rg.rebuild("creds", "sid", object(), object(), datetime(2026, 7, 24, 12, 0))
+    assert uploaded["filename"] == "_repo_graph.html"
+    assert uploaded["mime"] == "text/html"
+    assert b"<html" in uploaded["blob"].lower()
+
+
+def test_rebuild_upload_failure_is_swallowed(monkeypatch):
+    import jobpilot.sheets as sh
+    from jobpilot import github_repos, tailor
+
+    monkeypatch.setenv("JOBPILOT_GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(github_repos, "fetch_contributed_repos",
+                        lambda token, client: [_org_repo()])
+    monkeypatch.setattr(sh, "write_repo_graph", lambda c, s, j, ts: None)
+    monkeypatch.setattr(tailor, "_drive", lambda creds: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    notes = rg.rebuild("creds", "sid", object(), object(), datetime(2026, 7, 24, 12, 0))
+    assert any("1 repos" in n for n in notes)  # main rebuild note still present
+    assert any("skipped" in n.lower() for n in notes)  # upload failure noted, not raised
+
+
+def test_main_has_rebuild_repo_graph_flag():
+    import inspect
+
+    import jobpilot.__main__ as m
+
+    src = inspect.getsource(m)
+    assert "--rebuild-repo-graph" in src
+    assert "repo_graph" in src
