@@ -76,7 +76,7 @@ export function ApplicationsView() {
     return (
       <EmptyState
         title="No applications yet"
-        hint="Once the auto-apply pipeline queues a job, it shows up here for review."
+        hint="Once the apply pipeline queues a job, it shows up here for review."
       />
     );
   }
