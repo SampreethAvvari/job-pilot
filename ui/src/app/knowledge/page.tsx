@@ -1,4 +1,4 @@
-import { KnowledgePanel } from "@/components/knowledge-panel";
+import { KnowledgePanel, RepoKnowledgePanel } from "@/components/knowledge-panel";
 
 export default function KnowledgePage() {
   return (
@@ -13,7 +13,10 @@ export default function KnowledgePage() {
         </p>
       </div>
 
-      <KnowledgePanel />
+      <div className="flex flex-col gap-4">
+        <KnowledgePanel />
+        <RepoKnowledgePanel />
+      </div>
     </div>
   );
 }

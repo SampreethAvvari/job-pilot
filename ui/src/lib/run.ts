@@ -58,6 +58,10 @@ export async function triggerPortfolioGraph(): Promise<void> {
   await runWithArgs(["--rebuild-portfolio-graph"]);
 }
 
+export async function triggerRepoGraph(): Promise<void> {
+  await runWithArgs(["--rebuild-repo-graph"]);
+}
+
 export async function latestRun(): Promise<{ state: RunState; started: string }> {
   const client = await auth.getClient();
   const res = await client.request<{
