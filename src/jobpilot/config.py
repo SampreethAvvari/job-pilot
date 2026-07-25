@@ -12,6 +12,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict
 
+from jobpilot.apply.profile import ApplicationProfile
+
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -120,6 +122,7 @@ class Config(_Strict):
     sheet: SheetCfg = SheetCfg()
     digest: DigestCfg
     inbox_watch: InboxWatchCfg = InboxWatchCfg()
+    application: ApplicationProfile | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> "Config":

@@ -89,3 +89,34 @@ export type Company = {
   jobsLastFetch: string;
   notes: string;
 };
+
+// Applications tab (columns A-K — keep in sync with sheets.py APPLICATIONS_HEADERS
+// and the ApplicationPlan/Question models in src/jobpilot/apply/plan.py).
+export const APPLICATION_STATUSES = [
+  "queued", "filling", "needs_review", "needs_input", "approved", "submitting",
+  "submitted", "failed", "captcha_blocked", "manual_required", "check_email",
+] as const;
+
+export type ApplicationQuestion = {
+  label: string;
+  answer: string;
+  required: boolean;
+  charLimit: number | null;
+  kind: string;
+  screenshot: string;
+};
+
+export type Application = {
+  row: number;
+  jobId: string;
+  company: string;
+  title: string;
+  ats: string;
+  status: string;
+  location: string;
+  coverLetter: string;
+  evidence: string;
+  questions: ApplicationQuestion[];
+  updated: string;
+  notes: string[];
+};

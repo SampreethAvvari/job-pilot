@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from googleapiclient.discovery import build
@@ -540,6 +541,113 @@ def read_portfolio_graph(creds, spreadsheet_id: str) -> str:
             .get(spreadsheetId=spreadsheet_id, range="PortfolioGraph!A2:C2").execute())
     rows = resp.get("values", [])
     return rows[0][2] if rows and len(rows[0]) >= 3 else ""
+
+
+APPLICATIONS_HEADERS = [
+    "Job ID", "Company", "Title", "ATS", "Status", "Location", "Cover letter",
+    "Evidence", "Questions", "Updated", "Notes",
+]
+
+
+def ensure_applications_tab(creds, spreadsheet_id: str) -> None:
+    svc = _svc(creds)
+    meta = svc.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    titles = [s["properties"]["title"] for s in meta["sheets"]]
+    if "Applications" in titles:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": "Applications"}}}]},
+    ).execute()
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="Applications!A1", valueInputOption="RAW",
+        body={"values": [APPLICATIONS_HEADERS]},
+    ).execute()
+
+
+def _json_capped(items: list, limit: int = 45000) -> tuple[str, int]:
+    """Serialize a list to JSON, capped at `limit` chars.
+
+    Slicing a JSON string mid-document produces malformed JSON that every
+    reader degrades to `[]`, silently losing every element, not just the
+    ones past the cap. Instead, drop whole elements from the end until the
+    serialized form fits. Returns (json_str, n_dropped) so callers can leave
+    a note behind about what got cut.
+    """
+    kept = list(items)
+    serialized = json.dumps(kept)
+    while len(serialized) > limit and kept:
+        kept.pop()
+        serialized = json.dumps(kept)
+    return serialized, len(items) - len(kept)
+
+
+def upsert_application(creds, spreadsheet_id: str, plan: dict, now_str: str) -> None:
+    """UPSERT keyed on Job ID: update the existing row in place, else append."""
+    ensure_applications_tab(creds, spreadsheet_id)
+    svc = _svc(creds)
+    questions_json, n_dropped = _json_capped(plan["questions"])
+    notes = list(plan["notes"])
+    if n_dropped:
+        notes.append(f"{n_dropped} questions omitted (size cap)")
+    notes_json, _ = _json_capped(notes)
+    row = [
+        plan["job_id"],
+        plan["company"],
+        plan["title"],
+        plan["ats"],
+        plan["status"],
+        plan["location_key"],
+        plan["cover_letter_pdf_url"],
+        plan["evidence_folder"],
+        questions_json,
+        now_str,
+        notes_json,
+    ]
+    resp = (
+        svc.spreadsheets()
+        .values()
+        .get(spreadsheetId=spreadsheet_id, range="Applications!A2:A")
+        .execute()
+    )
+    existing_ids = [r[0] if r else "" for r in resp.get("values", [])]
+    if plan["job_id"] in existing_ids:
+        sheet_row = existing_ids.index(plan["job_id"]) + 2
+        svc.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id, range=f"Applications!A{sheet_row}",
+            valueInputOption="RAW", body={"values": [row]},
+        ).execute()
+    else:
+        svc.spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id, range="Applications!A1",
+            valueInputOption="RAW", insertDataOption="INSERT_ROWS",
+            body={"values": [row]},
+        ).execute()
+
+
+def read_applications(creds, spreadsheet_id: str) -> list[dict]:
+    """Applications tab rows as dicts keyed by header; Questions/Notes parsed
+    back from JSON (malformed or missing cells degrade to [])."""
+    ensure_applications_tab(creds, spreadsheet_id)
+    resp = (
+        _svc(creds)
+        .spreadsheets()
+        .values()
+        .get(spreadsheetId=spreadsheet_id, range="Applications!A2:K")
+        .execute()
+    )
+    rows = []
+    for i, values in enumerate(resp.get("values", []), start=2):
+        padded = values + [""] * (len(APPLICATIONS_HEADERS) - len(values))
+        d = {"_row": i, **dict(zip(APPLICATIONS_HEADERS, padded))}
+        for key in ("Questions", "Notes"):
+            try:
+                parsed = json.loads(d[key]) if d[key] else []
+            except (json.JSONDecodeError, TypeError):
+                parsed = []
+            d[key] = parsed if isinstance(parsed, list) else []
+        rows.append(d)
+    return rows
 
 
 def read_rows(creds, spreadsheet_id: str) -> list[dict]:
