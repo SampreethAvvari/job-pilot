@@ -23,7 +23,7 @@ README_CHARS = 1500
 PORTFOLIO_CHARS = 6000
 
 UA = {"User-Agent": "Mozilla/5.0 (compatible; JobPilot)"}
-AUTO_SECTIONS = ("profile", "resumes", "github", "portfolio")
+AUTO_SECTIONS = ("profile", "resumes", "github", "portfolio", "repos")
 
 
 def _github_user(cfg: Config) -> str:
@@ -103,6 +103,22 @@ def portfolio_section(cfg: Config, client: httpx.Client, creds=None,
         return ""
 
 
+def repos_section(cfg: Config, creds=None, spreadsheet_id: str = "") -> str:
+    """Render the stored repo graph into pack text; no crawl fallback (unlike
+    portfolio_section) since repos come solely from the GitHub contributions API."""
+    if not (creds and spreadsheet_id):
+        return ""
+    from jobpilot import repo_graph as rgmod
+
+    try:
+        raw = sheets.read_repo_graph(creds, spreadsheet_id)
+        if not raw:
+            return ""
+        return rgmod.render_repo_pack(rgmod.RepoGraph.model_validate_json(raw))
+    except Exception:  # noqa: BLE001 — Sheets error or parse failure: stay empty
+        return ""
+
+
 def refresh(creds, spreadsheet_id: str, cfg: Config, now: datetime) -> list[str]:
     """Rebuild every auto section; never raises (digest-note degradation)."""
     client = httpx.Client(timeout=20, follow_redirects=True, headers=UA)
@@ -113,6 +129,7 @@ def refresh(creds, spreadsheet_id: str, cfg: Config, now: datetime) -> list[str]
         "resumes": resumes_section,
         "github": lambda: github_section(cfg, client),
         "portfolio": lambda: portfolio_section(cfg, client, creds, spreadsheet_id),
+        "repos": lambda: repos_section(cfg, creds, spreadsheet_id),
     }
     for name, build in builders.items():
         try:

@@ -169,6 +169,7 @@ def _patch_full_run(monkeypatch, calls):
     import jobpilot.knowledge as knowledge
     import jobpilot.outreach as outreach_mod
     import jobpilot.portfolio_graph as portfolio_graph
+    import jobpilot.repo_graph as repo_graph
     import jobpilot.resolver as resolver
     import jobpilot.tailor as tailor_mod
 
@@ -203,11 +204,16 @@ def _patch_full_run(monkeypatch, calls):
         calls.append("portfolio_graph")
         return ["portfolio graph: rebuilt"]
 
+    def fake_repo_rebuild(creds, sid, cfg_, client, now):
+        calls.append("repo_graph")
+        return ["repo graph: rebuilt"]
+
     def fake_knowledge_refresh(creds, sid, cfg_, now):
         calls.append("knowledge")
         return ["knowledge: refreshed"]
 
     monkeypatch.setattr(portfolio_graph, "rebuild", fake_rebuild)
+    monkeypatch.setattr(repo_graph, "rebuild", fake_repo_rebuild)
     monkeypatch.setattr(knowledge, "refresh", fake_knowledge_refresh)
 
 
@@ -217,7 +223,16 @@ def test_full_run_rebuilds_portfolio_graph_before_knowledge_refresh(monkeypatch,
 
     pipeline.run(base_cfg, dry_run=False, fast=False)
 
-    assert calls == ["portfolio_graph", "knowledge"]
+    assert calls == ["portfolio_graph", "repo_graph", "knowledge"]
+
+
+def test_full_run_rebuilds_repo_graph(monkeypatch, base_cfg):
+    calls: list[str] = []
+    _patch_full_run(monkeypatch, calls)
+
+    pipeline.run(base_cfg, dry_run=False, fast=False)
+
+    assert "repo_graph" in calls
 
 
 def test_fast_run_skips_portfolio_graph_rebuild(monkeypatch, base_cfg):

@@ -543,6 +543,43 @@ def read_portfolio_graph(creds, spreadsheet_id: str) -> str:
     return rows[0][2] if rows and len(rows[0]) >= 3 else ""
 
 
+REPO_GRAPH_HEADERS = ["Key", "Updated", "JSON"]
+
+
+def ensure_repo_graph_tab(creds, spreadsheet_id: str) -> None:
+    svc = _svc(creds)
+    meta = svc.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    titles = [s["properties"]["title"] for s in meta["sheets"]]
+    if "RepoGraph" in titles:
+        return
+    svc.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"addSheet": {"properties": {"title": "RepoGraph"}}}]},
+    ).execute()
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="RepoGraph!A1", valueInputOption="RAW",
+        body={"values": [REPO_GRAPH_HEADERS]},
+    ).execute()
+
+
+def write_repo_graph(creds, spreadsheet_id: str, graph_json: str,
+                     now_str: str) -> None:
+    ensure_repo_graph_tab(creds, spreadsheet_id)
+    svc = _svc(creds)
+    svc.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range="RepoGraph!A2", valueInputOption="RAW",
+        body={"values": [["graph", now_str, graph_json[:45000]]]},
+    ).execute()
+
+
+def read_repo_graph(creds, spreadsheet_id: str) -> str:
+    ensure_repo_graph_tab(creds, spreadsheet_id)
+    resp = (_svc(creds).spreadsheets().values()
+            .get(spreadsheetId=spreadsheet_id, range="RepoGraph!A2:C2").execute())
+    rows = resp.get("values", [])
+    return rows[0][2] if rows and len(rows[0]) >= 3 else ""
+
+
 APPLICATIONS_HEADERS = [
     "Job ID", "Company", "Title", "ATS", "Status", "Location", "Cover letter",
     "Evidence", "Questions", "Updated", "Notes",

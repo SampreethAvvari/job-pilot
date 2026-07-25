@@ -37,6 +37,8 @@ def main() -> None:
                         help="rebuild the Assistant knowledge pack (skips pipeline)")
     parser.add_argument("--rebuild-portfolio-graph", action="store_true",
                         help="crawl the portfolio and rebuild the knowledge graph")
+    parser.add_argument("--rebuild-repo-graph", action="store_true",
+                        help="fetch contributed GitHub repos and rebuild the repo graph")
     parser.add_argument("--rebuild-resume", default="",
                         help="regenerate a master resume variant through the judge loop")
     args = parser.parse_args()
@@ -103,6 +105,23 @@ def main() -> None:
                               headers=portfolio_graph.UA)
         for note in portfolio_graph.rebuild(creds, sid, cfg, llm, client,
                                             datetime.now(timezone.utc)):
+            print(note)
+        return
+
+    if args.rebuild_repo_graph:
+        import os
+        from datetime import datetime, timezone
+
+        import httpx
+
+        from jobpilot import repo_graph
+        from jobpilot.gauth import credentials
+
+        creds = credentials()
+        sid = os.environ.get("JOBPILOT_SPREADSHEET_ID") or cfg.sheet.spreadsheet_id
+        client = httpx.Client(timeout=20, follow_redirects=True)
+        for note in repo_graph.rebuild(creds, sid, cfg, client,
+                                       datetime.now(timezone.utc)):
             print(note)
         return
 
