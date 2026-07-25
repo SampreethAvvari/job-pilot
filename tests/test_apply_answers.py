@@ -112,3 +112,38 @@ def test_genuine_eeo_race_question_locks_with_select_kind_too():
     q = pl.Question(label="Race/Ethnicity", kind="select")
     out = an.answer_question(q, "jd", _resolved(), "", llm=_no_llm)
     assert out == "Prefer not to say"
+
+
+# --- Phase 2 final review fixes: GPA, years-of-experience, free-text EEO ---
+
+def test_gpa_question_locks_to_profile_gpa_without_llm():
+    q = pl.Question(label="What is your GPA?", kind="text")
+    out = an.answer_question(q, "jd", _resolved(), "", llm=_no_llm)
+    assert out == "3.8/4"
+
+
+def test_grade_point_average_phrasing_also_locks_without_llm():
+    q = pl.Question(label="Grade point average", kind="text")
+    out = an.answer_question(q, "jd", _resolved(), "", llm=_no_llm)
+    assert out == "3.8/4"
+
+
+def test_years_of_experience_locks_empty_without_llm():
+    q = pl.Question(label="How many years of experience do you have?",
+                    kind="text", required=True)
+    out = an.answer_question(q, "jd", _resolved(), "", llm=_no_llm)
+    assert out == ""
+
+
+def test_gender_free_text_question_locks_to_profile_without_llm():
+    q = pl.Question(label="What is your gender?", kind="text")
+    out = an.answer_question(q, "jd", _resolved(), "", llm=_no_llm)
+    assert out == "Prefer not to say"  # profile.eeo.gender
+
+
+def test_race_against_deadline_textarea_still_reaches_llm():
+    q = pl.Question(label="Describe a time you had to race against a deadline.",
+                    kind="textarea")
+    out = an.answer_question(q, "jd", _resolved(), "",
+                             llm=lambda p: "a real written answer")
+    assert out == "a real written answer"

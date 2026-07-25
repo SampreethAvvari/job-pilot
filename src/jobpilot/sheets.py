@@ -565,10 +565,32 @@ def ensure_applications_tab(creds, spreadsheet_id: str) -> None:
     ).execute()
 
 
+def _json_capped(items: list, limit: int = 45000) -> tuple[str, int]:
+    """Serialize a list to JSON, capped at `limit` chars.
+
+    Slicing a JSON string mid-document produces malformed JSON that every
+    reader degrades to `[]`, silently losing every element, not just the
+    ones past the cap. Instead, drop whole elements from the end until the
+    serialized form fits. Returns (json_str, n_dropped) so callers can leave
+    a note behind about what got cut.
+    """
+    kept = list(items)
+    serialized = json.dumps(kept)
+    while len(serialized) > limit and kept:
+        kept.pop()
+        serialized = json.dumps(kept)
+    return serialized, len(items) - len(kept)
+
+
 def upsert_application(creds, spreadsheet_id: str, plan: dict, now_str: str) -> None:
     """UPSERT keyed on Job ID: update the existing row in place, else append."""
     ensure_applications_tab(creds, spreadsheet_id)
     svc = _svc(creds)
+    questions_json, n_dropped = _json_capped(plan["questions"])
+    notes = list(plan["notes"])
+    if n_dropped:
+        notes.append(f"{n_dropped} questions omitted (size cap)")
+    notes_json, _ = _json_capped(notes)
     row = [
         plan["job_id"],
         plan["company"],
@@ -578,9 +600,9 @@ def upsert_application(creds, spreadsheet_id: str, plan: dict, now_str: str) -> 
         plan["location_key"],
         plan["cover_letter_pdf_url"],
         plan["evidence_folder"],
-        json.dumps(plan["questions"])[:45000],
+        questions_json,
         now_str,
-        json.dumps(plan["notes"])[:45000],
+        notes_json,
     ]
     resp = (
         svc.spreadsheets()

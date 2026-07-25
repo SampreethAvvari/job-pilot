@@ -78,6 +78,22 @@ def _locked_answer(q: Question, profile: ResolvedProfile, jd: str) -> str | None
            "18 or older", "18+", "at least 18"):
         return _YES if idn.over_18 else _NO
 
+    # Strong multi-word EEO phrasings lock regardless of kind, even on a
+    # free-text field, because they're specific enough to never collide with
+    # genuine behavioral prose (unlike the bare single words below). Checked
+    # first so a form that renders "What is your gender?" as kind=text still
+    # locks instead of falling through to the LLM.
+    if _is(lbl, "what is your gender", "gender identity"):
+        return profile.eeo.gender
+    if _is(lbl, "race/ethnicity", "race / ethnicity", "your race"):
+        return profile.eeo.race_ethnicity
+    if _is(lbl, "veteran status", "protected veteran"):
+        return profile.eeo.veteran_status
+    if _is(lbl, "disability status"):
+        return profile.eeo.disability_status
+    if _is(lbl, "are you hispanic", "hispanic or latino"):
+        return _YES if profile.eeo.hispanic_latino else _NO
+
     # EEO single-word categories are ambiguous in free text (e.g. "race against
     # a deadline", "sponsor or champion") -> only lock on structured fields
     # (boolean/select/eeo kind), and use word-boundary matching.
@@ -104,6 +120,20 @@ def _locked_answer(q: Question, profile: ResolvedProfile, jd: str) -> str | None
         return profile.compensation.earliest_start
     if _is(lbl, "notice period"):
         return profile.compensation.notice_period
+
+    # GPA and numeric years-of-experience are hard numbers: the LLM must never
+    # invent one. GPA comes verbatim from the profile (empty education/gpa ->
+    # "" -> needs_input for a required question). Years-of-experience has no
+    # profile field to source from, so it locks to "" rather than let the LLM
+    # guess a number; a human supplies the exact figure. "years" is required
+    # in the needle so this never swallows a legitimate open question like
+    # "Describe your experience with Python."
+    if _is(lbl, "gpa", "grade point average"):
+        if profile.education and profile.education[0].gpa:
+            return profile.education[0].gpa
+        return ""
+    if _is(lbl, "years of experience", "how many years", "years of professional"):
+        return ""
     return None
 
 

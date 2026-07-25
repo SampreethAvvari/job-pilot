@@ -139,3 +139,29 @@ def test_read_applications_degrades_on_malformed_json(monkeypatch):
 
     rows = sh.read_applications(None, "sid")
     assert rows[0]["Questions"] == []
+
+
+def test_oversized_questions_drop_whole_questions_not_slice_json(monkeypatch):
+    """Phase 2 final review fix: a plan whose questions serialize past 45000
+    chars must still store VALID JSON (readable back as a non-empty list),
+    with whole questions dropped from the end rather than the JSON string
+    sliced mid-document (which would corrupt it to []). A size-cap note must
+    be left behind."""
+    _make_fake_svc(monkeypatch)
+    big_label = "x" * 2000
+    n_questions = 40  # 40 * ~2000+ chars per question >> 45000
+    plan = _plan()
+    plan["questions"] = [
+        {"label": f"{big_label}-{i}", "answer": "a", "required": True,
+         "char_limit": None, "kind": "text", "screenshot": ""}
+        for i in range(n_questions)
+    ]
+    sh.upsert_application(None, "sid", plan, "2026-07-24 12:00")
+
+    rows = sh.read_applications(None, "sid")
+    assert len(rows) == 1
+    questions = rows[0]["Questions"]
+    assert isinstance(questions, list)
+    assert 0 < len(questions) < n_questions  # whole questions dropped, not zero
+    notes = rows[0]["Notes"]
+    assert any("size cap" in n for n in notes)
